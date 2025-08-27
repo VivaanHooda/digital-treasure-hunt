@@ -66,8 +66,15 @@ const Leaderboard = () => {
     return () => clearInterval(interval)
   }, [])
 
-  const handleBackToDashboard = () => {
-    navigate('/dashboard')
+  // Smart back navigation - checks for admin flag
+  const handleBackNavigation = () => {
+    const returnToAdmin = sessionStorage.getItem('returnToAdmin')
+    if (returnToAdmin === 'true') {
+      sessionStorage.removeItem('returnToAdmin') // Clean up the flag
+      navigate('/admin')
+    } else {
+      navigate('/dashboard')
+    }
   }
 
   const handleRefresh = () => {
@@ -123,6 +130,9 @@ const Leaderboard = () => {
     )
   }
 
+  // Check if we're in admin mode for display purposes
+  const isAdminMode = sessionStorage.getItem('isAdmin') === 'true'
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
       {/* Navigation Header */}
@@ -130,15 +140,24 @@ const Leaderboard = () => {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
             <button
-              onClick={handleBackToDashboard}
+              onClick={handleBackNavigation}
               className="flex items-center text-gray-300 hover:text-white transition-colors text-sm sm:text-base"
             >
               <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
-              <span className="hidden xs:inline">Dashboard</span>
+              <span className="hidden xs:inline">
+                {isAdminMode ? 'Admin Panel' : 'Dashboard'}
+              </span>
               <span className="xs:hidden">Back</span>
             </button>
             
-            <h1 className="text-lg sm:text-xl font-bold text-white">Leaderboard</h1>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-lg sm:text-xl font-bold text-white">Leaderboard</h1>
+              {isAdminMode && (
+                <span className="px-2 py-1 bg-red-500 text-white text-xs rounded-full">
+                  Admin
+                </span>
+              )}
+            </div>
             
             <button
               onClick={handleRefresh}
@@ -395,8 +414,8 @@ const Leaderboard = () => {
           </div>
         </div>
 
-        {/* Your Team Highlight */}
-        {currentUser && teamData && (
+        {/* Your Team Highlight - Only show for regular users, not admin */}
+        {currentUser && teamData && !isAdminMode && (
           <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur-md rounded-xl p-4 sm:p-6 border border-blue-500/30 mt-6 sm:mt-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
               <div>

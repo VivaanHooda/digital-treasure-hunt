@@ -41,6 +41,16 @@ const Login = () => {
     
     if (!validateForm()) return
 
+    // HARDCODED ADMIN CHECK - Check credentials before Firebase
+    if (formData.email === 'vivaan.hooda@gmail.com' && formData.password === 'hooda@123') {
+      console.log('Admin credentials detected - bypassing Firebase auth')
+      // Set a flag to indicate admin mode and redirect directly
+      sessionStorage.setItem('isAdmin', 'true')
+      navigate('/admin')
+      return
+    }
+
+    // Regular user login
     try {
       await login(formData.email, formData.password)
       navigate('/dashboard')
@@ -136,7 +146,7 @@ const Login = () => {
               {/* Email Field - Enhanced mobile UX */}
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
-                  Team Leader Email
+                  Email Address
                 </label>
                 <div className="relative group">
                   <Mail className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5 group-focus-within:text-cyan-400 transition-colors" />
@@ -151,7 +161,7 @@ const Login = () => {
                       hover:border-gray-600/50 text-sm sm:text-base
                       min-h-[48px] sm:min-h-[56px]
                     "
-                    placeholder="Enter your team leader's email"
+                    placeholder="Enter your email address"
                   />
                   <div className="absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-r from-cyan-500/0 via-cyan-500/0 to-cyan-500/0 group-focus-within:from-cyan-500/10 group-focus-within:via-cyan-500/5 group-focus-within:to-cyan-500/10 transition-all duration-500 pointer-events-none"></div>
                 </div>

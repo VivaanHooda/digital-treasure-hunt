@@ -24,11 +24,25 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Register new team
-  const register = async (email, password, teamInfo) => {
+  // Register new team or admin
+  const register = async (email, password, teamInfo = null) => {
     try {
       setError(null);
       setLoading(true);
+
+      // Check if this is admin registration
+      if (email === 'vivaan.hooda@gmail.com') {
+        console.log('Creating admin account...');
+        // Create Firebase auth user for admin without team data
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        console.log('Admin account created successfully');
+        return userCredential.user;
+      }
+
+      // Regular team registration
+      if (!teamInfo) {
+        throw new Error('Team information is required for regular registration');
+      }
 
       // Validate team members (3-4 members)
       if (teamInfo.teamMembers.length < 3 || teamInfo.teamMembers.length > 4) {
@@ -69,7 +83,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Login existing team
+  // Login existing team or admin
   const login = async (email, password) => {
     try {
       setError(null);
@@ -101,13 +115,19 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(user);
       
       if (user) {
-        // Load team data
-        try {
-          const data = await getTeamData(user.uid);
-          setTeamData(data);
-        } catch (error) {
-          console.error('Error loading team data:', error);
-          setError('Failed to load team data');
+        // Check if this is admin user
+        if (user.email === 'vivaan.hooda@gmail.com') {
+          console.log('Admin user detected, skipping team data load');
+          setTeamData(null); // Admin doesn't have team data
+        } else {
+          // Load team data for regular users
+          try {
+            const data = await getTeamData(user.uid);
+            setTeamData(data);
+          } catch (error) {
+            console.error('Error loading team data:', error);
+            setError('Failed to load team data');
+          }
         }
       } else {
         setTeamData(null);

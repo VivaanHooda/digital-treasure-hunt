@@ -6,6 +6,8 @@ import Register from './components/auth/Register'
 import Dashboard from './components/game/Dashboard'
 import Game from './components/game/Game'
 import Leaderboard from './components/leaderboard/Leaderboard'
+import AdminPage from './components/admin/AdminPage'
+import NotificationPopup from './components/common/NotificationPopup'
 import LoadingSpinner from './components/common/LoadingSpinner'
 import AnimatedBackground from './components/common/AnimatedBackground'
 import PageTransition from './components/common/PageTransition'
@@ -18,7 +20,34 @@ const ProtectedRoute = ({ children }) => {
     return <LoadingSpinner />
   }
   
-  return currentUser ? children : <Navigate to="/login" />
+  // Check if admin is logged in via session (for hardcoded admin)
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true'
+  
+  return (currentUser || isAdmin) ? children : <Navigate to="/login" />
+}
+
+// Hardcoded Admin Route Component - Bypasses Firebase auth for admin
+const AdminRoute = ({ children }) => {
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    // Simulate loading check
+    const timer = setTimeout(() => setLoading(false), 500)
+    return () => clearTimeout(timer)
+  }, [])
+  
+  if (loading) {
+    return <LoadingSpinner />
+  }
+  
+  // Check if admin session is active (set in Login.jsx)
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true'
+  
+  if (!isAdmin) {
+    return <Navigate to="/login" />
+  }
+  
+  return children
 }
 
 // Public Route Component (redirect if already logged in)
@@ -27,6 +56,12 @@ const PublicRoute = ({ children }) => {
   
   if (loading) {
     return <LoadingSpinner />
+  }
+  
+  // Check if admin is logged in via session
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true'
+  if (isAdmin) {
+    return <Navigate to="/admin" />
   }
   
   return currentUser ? <Navigate to="/dashboard" /> : children
@@ -76,6 +111,13 @@ function App() {
               </PublicRoute>
             } />
             
+            {/* Hardcoded Admin Route */}
+            <Route path="/admin" element={
+              <AdminRoute>
+                <AdminPage />
+              </AdminRoute>
+            } />
+            
             {/* Protected Routes */}
             <Route path="/dashboard" element={
               <ProtectedRoute>
@@ -97,6 +139,9 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" />} />
           </Routes>
         </PageTransition>
+
+        {/* Global Notification Popup - Shows on all pages for authenticated users */}
+        <NotificationPopup />
       </div>
 
       {/* Global UI Effects - Mobile optimized */}
