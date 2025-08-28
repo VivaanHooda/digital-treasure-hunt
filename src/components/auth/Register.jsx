@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { Plus, Trash2, Users, Mail, Lock, User, Hash, MapPin, Trophy, Zap, Target, Clock, UserPlus, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, Users, Mail, Lock, User, Phone, MapPin, Trophy, Zap, Target, Clock, UserPlus, Eye, EyeOff, AlertTriangle, GraduationCap } from 'lucide-react'
 
 const Register = () => {
   const { register, error, loading } = useAuth()
@@ -13,11 +13,14 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     teamLeaderName: '',
-    teamLeaderAdmissionNumber: '',
+    teamLeaderMobile: '',
+    teamLeaderDepartment: '',
     teamMembers: [
-      { name: '', admissionNumber: '' },
-      { name: '', admissionNumber: '' },
-      { name: '', admissionNumber: '' }
+      { name: '', mobile: '', department: '' },
+      { name: '', mobile: '', department: '' },
+      { name: '', mobile: '', department: '' },
+      { name: '', mobile: '', department: '' },
+      { name: '', mobile: '', department: '' }
     ]
   })
 
@@ -27,9 +30,43 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  // Department options
+  const departments = [
+    'Computer Science & Engineering (AIML)',
+    'Computer Science & Engineering',
+    'Computer Science & Engineering (Data Science)',
+    'Computer Science & Engineering (Cyber Security)',
+    'Electronics & Communication Engineering',
+    'Electrical & Electronics Engineering',
+    'Electronics & Telecommunication Engineering',
+    'Mechanical Engineering',
+    'Aerospace Engineering',
+    'Chemical Engineering',
+    'Civil Engineering',
+    'Biotechnology',
+    'Industrial Engineering & Management'
+  ]
+
   useEffect(() => {
     setIsVisible(true)
   }, [])
+
+  const validateMobile = (mobile) => {
+    // Remove country code and check if it's a valid 10-digit Indian mobile number
+    const cleanMobile = mobile.replace(/^\+91\s*/, '').replace(/\D/g, '')
+    return /^[6-9]\d{9}$/.test(cleanMobile)
+  }
+
+  const formatMobile = (mobile) => {
+    // Auto-format with +91 prefix
+    const cleanMobile = mobile.replace(/\D/g, '')
+    if (cleanMobile.startsWith('91')) {
+      return '+91 ' + cleanMobile.substring(2)
+    } else if (cleanMobile.length <= 10) {
+      return '+91 ' + cleanMobile
+    }
+    return mobile
+  }
 
   const validateForm = () => {
     const errors = {}
@@ -58,31 +95,45 @@ const Register = () => {
       errors.teamLeaderName = 'Team leader name is required'
     }
 
-    if (!formData.teamLeaderAdmissionNumber) {
-      errors.teamLeaderAdmissionNumber = 'Team leader admission number is required'
+    if (!formData.teamLeaderMobile) {
+      errors.teamLeaderMobile = 'Team leader mobile number is required'
+    } else if (!validateMobile(formData.teamLeaderMobile)) {
+      errors.teamLeaderMobile = 'Please enter a valid Indian mobile number'
     }
 
+    if (!formData.teamLeaderDepartment) {
+      errors.teamLeaderDepartment = 'Team leader department is required'
+    }
+
+    // Validate all 5 team members (exactly 6 total including leader)
     const validMembers = formData.teamMembers.filter(member => 
-      member.name.trim() && member.admissionNumber.trim()
+      member.name.trim() && member.mobile.trim() && member.department.trim()
     )
     
-    if (validMembers.length < 3) {
-      errors.teamMembers = 'At least 3 team members are required'
+    if (validMembers.length !== 5) {
+      errors.teamMembers = 'All 5 team members are required (6 total including team leader)'
     }
 
-    // Check for duplicate admission numbers including leader's
-    const allAdmissionNumbers = [
-      formData.teamLeaderAdmissionNumber.trim(),
-      ...validMembers.map(m => m.admissionNumber.trim())
+    // Check for duplicate mobile numbers including leader's
+    const allMobileNumbers = [
+      formData.teamLeaderMobile.replace(/^\+91\s*/, '').replace(/\D/g, ''),
+      ...validMembers.map(m => m.mobile.replace(/^\+91\s*/, '').replace(/\D/g, ''))
     ].filter(num => num)
     
-    const duplicates = allAdmissionNumbers.filter((num, index) => 
-      allAdmissionNumbers.indexOf(num) !== index
+    const duplicates = allMobileNumbers.filter((num, index) => 
+      allMobileNumbers.indexOf(num) !== index
     )
     
     if (duplicates.length > 0) {
-      errors.teamMembers = 'Admission numbers must be unique (including team leader)'
+      errors.teamMembers = 'Mobile numbers must be unique (including team leader)'
     }
+
+    // Validate each team member's mobile number
+    formData.teamMembers.forEach((member, index) => {
+      if (member.mobile.trim() && !validateMobile(member.mobile)) {
+        errors[`member${index}Mobile`] = `Member ${index + 2}: Invalid mobile number`
+      }
+    })
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
@@ -96,15 +147,18 @@ const Register = () => {
     setIsSubmitting(true)
     
     try {
-      const validMembers = formData.teamMembers.filter(member => 
-        member.name.trim() && member.admissionNumber.trim()
-      )
+      // Format all mobile numbers
+      const formattedTeamMembers = formData.teamMembers.map(member => ({
+        ...member,
+        mobile: member.mobile.replace(/^\+91\s*/, '').replace(/\D/g, '')
+      }))
 
       await register(formData.email, formData.password, {
         teamName: formData.teamName,
         teamLeaderName: formData.teamLeaderName,
-        teamLeaderAdmissionNumber: formData.teamLeaderAdmissionNumber,
-        teamMembers: validMembers
+        teamLeaderMobile: formData.teamLeaderMobile.replace(/^\+91\s*/, '').replace(/\D/g, ''),
+        teamLeaderDepartment: formData.teamLeaderDepartment,
+        teamMembers: formattedTeamMembers
       })
       
       navigate('/dashboard')
@@ -115,34 +169,28 @@ const Register = () => {
     }
   }
 
-  const addTeamMember = () => {
-    if (formData.teamMembers.length < 4) {
-      setFormData({
-        ...formData,
-        teamMembers: [...formData.teamMembers, { name: '', admissionNumber: '' }]
-      })
-    }
-  }
-
-  const removeTeamMember = (index) => {
-    if (formData.teamMembers.length > 3) {
-      const updatedMembers = formData.teamMembers.filter((_, i) => i !== index)
-      setFormData({ ...formData, teamMembers: updatedMembers })
-    }
-  }
-
   const updateTeamMember = (index, field, value) => {
-    const updatedMembers = formData.teamMembers.map((member, i) => 
-      i === index ? { ...member, [field]: value } : member
-    )
+    const updatedMembers = formData.teamMembers.map((member, i) => {
+      if (i === index) {
+        if (field === 'mobile') {
+          return { ...member, [field]: formatMobile(value) }
+        }
+        return { ...member, [field]: value }
+      }
+      return member
+    })
     setFormData({ ...formData, teamMembers: updatedMembers })
+  }
+
+  const handleMobileChange = (value) => {
+    setFormData({ ...formData, teamLeaderMobile: formatMobile(value) })
   }
 
   const stats = [
     { icon: Target, label: '30 Pictures', color: 'text-cyan-400' },
     { icon: Zap, label: '10 Riddles', color: 'text-purple-400' },
     { icon: Clock, label: '2 Hours', color: 'text-green-400' },
-    { icon: Users, label: '3-4 Members', color: 'text-yellow-400' }
+    { icon: Users, label: '6 Members', color: 'text-yellow-400' }
   ]
 
   return (
@@ -196,6 +244,19 @@ const Register = () => {
           <p className="text-gray-400 text-base sm:text-lg">
             Register your team for the ultimate adventure
           </p>
+        </div>
+
+        {/* Important Notice */}
+        <div className="bg-orange-500/10 border border-orange-500/50 rounded-xl p-4 mb-6 sm:mb-8">
+          <div className="flex items-start">
+            <AlertTriangle className="text-orange-400 mr-3 mt-0.5 flex-shrink-0 w-5 h-5" />
+            <div>
+              <p className="text-orange-300 font-medium text-sm mb-1">Important Notice</p>
+              <p className="text-orange-400 text-sm">
+                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device will automatically log out the previous session.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Stats - Mobile optimized grid */}
@@ -341,17 +402,17 @@ const Register = () => {
                   )}
                 </div>
 
-                {/* Team Leader Admission Number */}
+                {/* Team Leader Mobile Number */}
                 <div className="sm:col-span-2 md:col-span-1">
                   <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
-                    Admission Number
+                    Mobile Number
                   </label>
                   <div className="relative group">
-                    <Hash className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5 group-focus-within:text-cyan-400 transition-colors" />
+                    <Phone className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5 group-focus-within:text-cyan-400 transition-colors" />
                     <input
-                      type="text"
-                      value={formData.teamLeaderAdmissionNumber}
-                      onChange={(e) => setFormData({...formData, teamLeaderAdmissionNumber: e.target.value})}
+                      type="tel"
+                      value={formData.teamLeaderMobile}
+                      onChange={(e) => handleMobileChange(e.target.value)}
                       className="
                         w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3.5 sm:py-4 bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 
                         rounded-lg sm:rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 
@@ -359,14 +420,49 @@ const Register = () => {
                         hover:border-gray-600/50 text-sm sm:text-base
                         min-h-[48px] sm:min-h-[56px]
                       "
-                      placeholder="RVCE25BXXYYY"
+                      placeholder="+91 9876543210"
                     />
                     <div className="absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-r from-cyan-500/0 via-cyan-500/0 to-cyan-500/0 group-focus-within:from-cyan-500/10 group-focus-within:via-cyan-500/5 group-focus-within:to-cyan-500/10 transition-all duration-500 pointer-events-none"></div>
                   </div>
-                  {formErrors.teamLeaderAdmissionNumber && (
+                  {formErrors.teamLeaderMobile && (
                     <p className="text-red-400 text-xs sm:text-sm mt-2 flex items-center">
                       <div className="w-1 h-1 bg-red-400 rounded-full mr-2"></div>
-                      {formErrors.teamLeaderAdmissionNumber}
+                      {formErrors.teamLeaderMobile}
+                    </p>
+                  )}
+                </div>
+
+                {/* Team Leader Department */}
+                <div className="sm:col-span-2 md:col-span-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
+                    Department
+                  </label>
+                  <div className="relative group">
+                    <GraduationCap className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5 group-focus-within:text-cyan-400 transition-colors" />
+                    <select
+                      value={formData.teamLeaderDepartment}
+                      onChange={(e) => setFormData({...formData, teamLeaderDepartment: e.target.value})}
+                      className="
+                        w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3.5 sm:py-4 bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 
+                        rounded-lg sm:rounded-xl text-white focus:outline-none focus:border-cyan-400 
+                        focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300
+                        hover:border-gray-600/50 text-sm sm:text-base
+                        min-h-[48px] sm:min-h-[56px]
+                      "
+                    >
+                      <option value="" className="bg-gray-800">Select Department</option>
+                      {departments.map((dept) => (
+                        <option key={dept} value={dept} className="bg-gray-800">
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-r from-cyan-500/0 via-cyan-500/0 to-cyan-500/0 group-focus-within:from-cyan-500/10 group-focus-within:via-cyan-500/5 group-focus-within:to-cyan-500/10 transition-all duration-500 pointer-events-none"></div>
+                  </div>
+                  {formErrors.teamLeaderDepartment && (
+                    <p className="text-red-400 text-xs sm:text-sm mt-2 flex items-center">
+                      <div className="w-1 h-1 bg-red-400 rounded-full mr-2"></div>
+                      {formErrors.teamLeaderDepartment}
                     </p>
                   )}
                 </div>
@@ -447,7 +543,7 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Team Members Section */}
+            {/* Team Members Section - Fixed to 5 members */}
             <div className="space-y-4 sm:space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div className="flex items-center space-x-2 sm:space-x-3">
@@ -455,51 +551,27 @@ const Register = () => {
                     <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   </div>
                   <h3 className="text-lg sm:text-xl font-semibold text-white">
-                    Team Members ({formData.teamMembers.length}/4)
+                    Team Members (5 Required)
                   </h3>
                 </div>
-                {formData.teamMembers.length < 4 && (
-                  <button
-                    type="button"
-                    onClick={addTeamMember}
-                    className="
-                      flex items-center justify-center px-4 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 
-                      hover:from-green-600 hover:to-teal-700 text-white font-medium rounded-lg sm:rounded-xl 
-                      transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-500/25
-                      text-sm sm:text-base min-h-[44px] w-full sm:w-auto
-                    "
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Add Member
-                  </button>
-                )}
+                <div className="text-sm text-gray-400 bg-gray-700/30 px-3 py-1 rounded-full">
+                  Total: 6 members (including leader)
+                </div>
               </div>
 
               <div className="space-y-3 sm:space-y-4">
                 {formData.teamMembers.map((member, index) => (
                   <div key={index} className="group">
-                    <div className="flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 bg-gray-900/30 backdrop-blur-sm rounded-lg sm:rounded-xl border border-gray-700/30 hover:border-gray-600/50 transition-all duration-300">
+                    <div className="p-3 sm:p-4 bg-gray-900/30 backdrop-blur-sm rounded-lg sm:rounded-xl border border-gray-700/30 hover:border-gray-600/50 transition-all duration-300">
                       
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <span className="text-xs sm:text-sm font-medium text-gray-400">
-                          Member {index + 1}
+                          Member {index + 2}
                         </span>
-                        {formData.teamMembers.length > 3 && (
-                          <button
-                            type="button"
-                            onClick={() => removeTeamMember(index)}
-                            className="
-                              p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 
-                              rounded-lg transition-all duration-300 group-hover:scale-110
-                              min-h-[44px] min-w-[44px] flex items-center justify-center
-                            "
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                        <span className="text-xs text-green-400">Required</span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:gap-4">
                         {/* Member Name */}
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-gray-400 mb-2">
@@ -518,29 +590,65 @@ const Register = () => {
                                 min-h-[44px]
                               "
                               placeholder="Enter full name"
+                              required
                             />
                           </div>
+                          {formErrors[`member${index}Name`] && (
+                            <p className="text-red-400 text-xs mt-1">{formErrors[`member${index}Name`]}</p>
+                          )}
                         </div>
 
-                        {/* Admission Number */}
+                        {/* Mobile Number */}
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-gray-400 mb-2">
-                            Admission Number
+                            Mobile Number
                           </label>
                           <div className="relative group">
-                            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 group-focus-within:text-cyan-400 transition-colors" />
+                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 group-focus-within:text-cyan-400 transition-colors" />
                             <input
-                              type="text"
-                              value={member.admissionNumber}
-                              onChange={(e) => updateTeamMember(index, 'admissionNumber', e.target.value)}
+                              type="tel"
+                              value={member.mobile}
+                              onChange={(e) => updateTeamMember(index, 'mobile', e.target.value)}
                               className="
                                 w-full pl-10 pr-3 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-600/50 
                                 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 
                                 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300 text-sm
                                 min-h-[44px]
                               "
-                              placeholder="RVCE25BXXYYY"
+                              placeholder="+91 9876543210"
+                              required
                             />
+                          </div>
+                          {formErrors[`member${index}Mobile`] && (
+                            <p className="text-red-400 text-xs mt-1">{formErrors[`member${index}Mobile`]}</p>
+                          )}
+                        </div>
+
+                        {/* Department */}
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-400 mb-2">
+                            Department
+                          </label>
+                          <div className="relative group">
+                            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 group-focus-within:text-cyan-400 transition-colors" />
+                            <select
+                              value={member.department}
+                              onChange={(e) => updateTeamMember(index, 'department', e.target.value)}
+                              className="
+                                w-full pl-10 pr-3 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-600/50 
+                                rounded-lg text-white focus:outline-none focus:border-cyan-400 
+                                focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300 text-sm
+                                min-h-[44px]
+                              "
+                              required
+                            >
+                              <option value="" className="bg-gray-800">Select Department</option>
+                              {departments.map((dept) => (
+                                <option key={dept} value={dept} className="bg-gray-800">
+                                  {dept}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                       </div>
@@ -605,12 +713,12 @@ const Register = () => {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {[
-              'Team must have 3-4 members exactly',
+              'Team must have exactly 6 members (including leader)',
               'One team leader manages the account',  
-              'All members need unique admission numbers',
+              'All members need unique mobile numbers',
               'Team leader receives all communications',
               'Physical presence required for verification',
-              'Teamwork is key to solving challenges'
+              'Only 1 device login allowed at a time'
             ].map((rule, index) => (
               <div key={index} className="flex items-start group">
                 <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mr-2 sm:mr-3 mt-0.5 group-hover:scale-110 transition-transform flex-shrink-0">

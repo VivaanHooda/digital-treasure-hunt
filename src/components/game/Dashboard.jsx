@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { getGameState, updateGameState, subscribeToGameSettings, getAllNotifications } from '../../firebase/collections'
-import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History } from 'lucide-react'
+import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History, AlertTriangle, Smartphone } from 'lucide-react'
 import { formatTime, getGameTimeRemaining } from '../../utils/gameUtils'
 import NotificationHistory from '../common/NotificationHistory'
 
@@ -202,6 +202,12 @@ const Dashboard = () => {
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* Single Device Login Notice */}
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                <Smartphone className="h-4 w-4 text-orange-400" />
+                <span className="text-orange-300 text-xs font-medium">Single Device Login</span>
+              </div>
+
               {/* Notification History Button - Only for non-admin users */}
               {currentUser && currentUser.email !== 'vivaan.hooda@gmail.com' && (
                 <button
@@ -248,6 +254,14 @@ const Dashboard = () => {
               <span className="text-white text-xs sm:text-sm font-medium">
                 {gameSettings?.isGameActive ? 'System Online' : 'System Paused'}
               </span>
+            </div>
+          </div>
+
+          {/* Single Device Notice - Mobile Version */}
+          <div className="sm:hidden mt-4">
+            <div className="flex items-center justify-center space-x-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg mx-auto w-fit">
+              <Smartphone className="h-4 w-4 text-orange-400" />
+              <span className="text-orange-300 text-xs font-medium">Single Device Login Only</span>
             </div>
           </div>
         </div>
@@ -301,41 +315,7 @@ const Dashboard = () => {
         )}
 
         <div className="grid lg:grid-cols-2 gap-4 sm:gap-8 mb-6 sm:mb-8">
-          {/* Team Information */}
-          <div className={`bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-8 border border-gray-700/50 shadow-2xl transition-all duration-700 hover:scale-[1.02] ${isVisible ? 'translate-x-0' : '-translate-x-10'}`}>
-            <div className="flex items-center mb-4 sm:mb-6">
-              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mr-3 sm:mr-4 shadow-lg">
-                <Users className="w-4 h-4 sm:w-7 sm:h-7 text-white" />
-              </div>
-              <h3 className="text-lg sm:text-2xl font-bold text-white">Team {teamData?.teamName || 'Unknown'}</h3>
-            </div>
-            
-            <div className="space-y-3 sm:space-y-4">
-              <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
-                <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide">Team Leader</p>
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mt-1">
-                  <p className="text-white font-semibold text-sm sm:text-lg">{teamData?.teamLeaderName || 'N/A'}</p>
-                  <p className="text-cyan-400 text-xs sm:text-sm font-mono">{teamData?.teamLeaderAdmissionNumber || 'N/A'}</p>
-                </div>
-              </div>
-              
-              <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
-                <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide mb-2 sm:mb-3">Team Members ({teamData?.totalMembers || 0})</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {teamData?.teamMembers?.map((member, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 bg-gray-600/20 rounded-lg hover:bg-gray-600/30 transition-colors">
-                      <span className="text-white font-medium text-sm sm:text-base">{member.name}</span>
-                      <span className="text-cyan-400 text-xs sm:text-sm font-mono">{member.admissionNumber}</span>
-                    </div>
-                  )) || (
-                    <div className="text-gray-400 text-center py-4 text-sm">No team members loaded</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Game Progress */}
+          {/* Mission Progress - Now First */}
           <div className={`bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-8 border border-gray-700/50 shadow-2xl transition-all duration-700 hover:scale-[1.02] ${isVisible ? 'translate-x-0' : 'translate-x-10'}`}>
             <div className="flex items-center mb-4 sm:mb-6">
               <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center mr-3 sm:mr-4 shadow-lg">
@@ -381,6 +361,46 @@ const Dashboard = () => {
                     <p className="text-gray-400 text-xs uppercase tracking-wide">Riddles</p>
                     <p className="text-lg sm:text-2xl font-bold text-white">{riddlesCompleted}/20</p>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Information - Now Second */}
+          <div className={`bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-8 border border-gray-700/50 shadow-2xl transition-all duration-700 hover:scale-[1.02] ${isVisible ? 'translate-x-0' : '-translate-x-10'}`}>
+            <div className="flex items-center mb-4 sm:mb-6">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mr-3 sm:mr-4 shadow-lg">
+                <Users className="w-4 h-4 sm:w-7 sm:h-7 text-white" />
+              </div>
+              <h3 className="text-lg sm:text-2xl font-bold text-white">Team {teamData?.teamName || 'Unknown'}</h3>
+            </div>
+            
+            <div className="space-y-3 sm:space-y-4">
+              <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
+                <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide">Team Leader</p>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mt-1">
+                  <p className="text-white font-semibold text-sm sm:text-lg">{teamData?.teamLeaderName || 'N/A'}</p>
+                  <div className="text-xs sm:text-sm">
+                    <p className="text-cyan-400 font-mono">{teamData?.teamLeaderMobile || 'N/A'}</p>
+                    <p className="text-gray-400">{teamData?.teamLeaderDepartment || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
+                <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide mb-2 sm:mb-3">Team Members ({teamData?.totalMembers || 0})</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {teamData?.teamMembers?.map((member, index) => (
+                    <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 bg-gray-600/20 rounded-lg hover:bg-gray-600/30 transition-colors">
+                      <span className="text-white font-medium text-sm sm:text-base">{member.name}</span>
+                      <div className="text-xs sm:text-sm">
+                        <span className="text-cyan-400 font-mono">{member.mobile}</span>
+                        <span className="text-gray-400 ml-2 sm:block">{member.department}</span>
+                      </div>
+                    </div>
+                  )) || (
+                    <div className="text-gray-400 text-center py-4 text-sm">No team members loaded</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -465,6 +485,19 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Single Device Login Warning */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 border border-orange-500/50 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 backdrop-blur-sm">
+          <div className="flex items-start">
+            <AlertTriangle className="text-orange-400 mr-3 mt-0.5 flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6" />
+            <div>
+              <p className="text-orange-300 font-medium text-sm sm:text-base mb-1">Device Login Policy</p>
+              <p className="text-orange-400 text-xs sm:text-sm">
+                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device will automatically log out the previous session. Ensure your team uses only one device for the treasure hunt.
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

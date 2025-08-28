@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { Mail, Lock, MapPin, Trophy, Zap, Target, Clock, Users } from 'lucide-react'
+import { Mail, Lock, MapPin, Trophy, Zap, Target, Clock, Users, AlertTriangle, Smartphone } from 'lucide-react'
 
 const Login = () => {
   const { login, error, loading } = useAuth()
@@ -60,10 +60,10 @@ const Login = () => {
   }
 
   const stats = [
-    { icon: Target, label: '30 Pictures', color: 'text-cyan-400' },
-    { icon: Zap, label: '10 Riddles', color: 'text-purple-400' },
+    { icon: Target, label: '20 Pictures', color: 'text-cyan-400' },
+    { icon: Zap, label: '20 Riddles', color: 'text-purple-400' },
     { icon: Clock, label: '2 Hours', color: 'text-green-400' },
-    { icon: Users, label: '3-4 Members', color: 'text-yellow-400' }
+    { icon: Users, label: '6 Members', color: 'text-yellow-400' }
   ]
 
   return (
@@ -108,6 +108,19 @@ const Login = () => {
           <p className="text-gray-400 text-base sm:text-lg">
             Enter the digital realm of adventure
           </p>
+        </div>
+
+        {/* Important Notice */}
+        <div className="bg-orange-500/10 border border-orange-500/50 rounded-xl p-4 mb-6 sm:mb-8">
+          <div className="flex items-start">
+            <Smartphone className="text-orange-400 mr-3 mt-0.5 flex-shrink-0 w-5 h-5" />
+            <div>
+              <p className="text-orange-300 font-medium text-sm mb-1">Single Device Login</p>
+              <p className="text-orange-400 text-sm">
+                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device will automatically log out the previous session.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Stats - Optimized grid for mobile */}
@@ -282,7 +295,7 @@ const Login = () => {
           </h3>
           <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-gray-300">
             {[
-              'Teams of 3-4 members only',
+              'Teams of exactly 6 members only',
               '1-minute cooldown between guesses',  
               '2-hour time limit for entire game',
               'Visit locations physically to verify'

@@ -44,23 +44,37 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Team information is required for regular registration');
       }
 
-      // Validate team members (3-4 members)
-      if (teamInfo.teamMembers.length < 3 || teamInfo.teamMembers.length > 4) {
-        throw new Error('Team must have 3-4 members');
+      // Validate team members (exactly 5 members, total 6 including leader)
+      if (teamInfo.teamMembers.length !== 5) {
+        throw new Error('Team must have exactly 5 members (6 total including team leader)');
+      }
+
+      // Validate that all team members have required fields
+      const invalidMembers = teamInfo.teamMembers.filter(member => 
+        !member.name.trim() || !member.mobile.trim() || !member.department.trim()
+      );
+      
+      if (invalidMembers.length > 0) {
+        throw new Error('All team members must have name, mobile number, and department filled');
       }
 
       // Create Firebase auth user
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Create team document - Include team name and team leader admission number
+      // Create team document with mobile numbers and departments
       const teamData = {
         teamName: teamInfo.teamName,
         teamLeaderEmail: email,
         teamLeaderName: teamInfo.teamLeaderName,
-        teamLeaderAdmissionNumber: teamInfo.teamLeaderAdmissionNumber,
-        teamMembers: teamInfo.teamMembers,
-        totalMembers: teamInfo.teamMembers.length
+        teamLeaderMobile: teamInfo.teamLeaderMobile,
+        teamLeaderDepartment: teamInfo.teamLeaderDepartment,
+        teamMembers: teamInfo.teamMembers.map(member => ({
+          name: member.name.trim(),
+          mobile: member.mobile.trim(),
+          department: member.department.trim()
+        })),
+        totalMembers: 6 // Always 6 (leader + 5 members)
       };
 
       const teamCreated = await createTeam(user.uid, teamData);
