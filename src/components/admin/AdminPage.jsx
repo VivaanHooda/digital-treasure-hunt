@@ -12,7 +12,7 @@ import {
   Timestamp
 } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { COLLECTIONS, sendNotification, getAllNotifications, deactivateNotification } from '../../firebase/collections'
+import { COLLECTIONS, sendNotification, getAllNotifications, deactivateNotification, deleteNotification } from '../../firebase/collections'
 import { 
   Settings, 
   Clock, 
@@ -212,6 +212,11 @@ const AdminPage = () => {
       setNotificationTitle('')
       setNotificationType('info')
       
+      // Refresh history if it's open
+      if (showNotificationHistory) {
+        loadNotificationHistory()
+      }
+      
       setTimeout(() => setSuccess(null), 3000)
     } catch (error) {
       console.error('Error sending notification:', error)
@@ -250,6 +255,18 @@ const AdminPage = () => {
     } catch (error) {
       console.error('Error deactivating notification:', error)
       setError('Failed to deactivate notification')
+    }
+  }
+
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      await deleteNotification(notificationId)
+      setSuccess('Notification deleted permanently')
+      loadNotificationHistory() // Refresh the history
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (error) {
+      console.error('Error deleting notification:', error)
+      setError('Failed to delete notification')
     }
   }
 
@@ -835,15 +852,25 @@ const AdminPage = () => {
                           </p>
                         </div>
                         
-                        {notification.isActive && (
+                        <div className="flex flex-col space-y-2 ml-4">
+                          {notification.isActive && (
+                            <button
+                              onClick={() => handleDeactivateNotification(notification.id)}
+                              className="flex items-center px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs transition-colors"
+                            >
+                              <EyeOff className="w-3 h-3 mr-1" />
+                              Deactivate
+                            </button>
+                          )}
+                          
                           <button
-                            onClick={() => handleDeactivateNotification(notification.id)}
-                            className="ml-4 flex items-center px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-xs transition-colors"
+                            onClick={() => handleDeleteNotification(notification.id)}
+                            className="flex items-center px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
                           >
-                            <EyeOff className="w-3 h-3 mr-1" />
-                            Deactivate
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Delete
                           </button>
-                        )}
+                        </div>
                       </div>
                     </div>
                   ))}

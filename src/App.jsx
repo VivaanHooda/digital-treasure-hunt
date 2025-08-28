@@ -7,10 +7,10 @@ import Dashboard from './components/game/Dashboard'
 import Game from './components/game/Game'
 import Leaderboard from './components/leaderboard/Leaderboard'
 import AdminPage from './components/admin/AdminPage'
-import NotificationPopup from './components/common/NotificationPopup'
 import LoadingSpinner from './components/common/LoadingSpinner'
 import AnimatedBackground from './components/common/AnimatedBackground'
 import PageTransition from './components/common/PageTransition'
+import NotificationProvider from './components/common/NotificationProvider'
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -95,53 +95,52 @@ function App() {
       {/* Animated Background */}
       <AnimatedBackground />
       
-      {/* Main Content */}
+      {/* Main Content with Notification Provider */}
       <div className="relative z-10 min-h-screen">
-        <PageTransition isTransitioning={isTransitioning}>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            } />
-            <Route path="/register" element={
-              <PublicRoute>
-                <Register />
-              </PublicRoute>
-            } />
-            
-            {/* Hardcoded Admin Route */}
-            <Route path="/admin" element={
-              <AdminRoute>
-                <AdminPage />
-              </AdminRoute>
-            } />
-            
-            {/* Protected Routes */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/game" element={
-              <ProtectedRoute>
-                <Game />
-              </ProtectedRoute>
-            } />
-            <Route path="/leaderboard" element={
-              <ProtectedRoute>
-                <Leaderboard />
-              </ProtectedRoute>
-            } />
-            
-            {/* Default Redirect */}
-            <Route path="/" element={<Navigate to="/dashboard" />} />
-          </Routes>
-        </PageTransition>
-
-        {/* Global Notification Popup - Shows on all pages for authenticated users */}
-        <NotificationPopup />
+        <NotificationProvider>
+          <PageTransition isTransitioning={isTransitioning}>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              } />
+              <Route path="/register" element={
+                <PublicRoute>
+                  <Register />
+                </PublicRoute>
+              } />
+              
+              {/* Hardcoded Admin Route - No notification provider for admin */}
+              <Route path="/admin" element={
+                <AdminRoute>
+                  <AdminPage />
+                </AdminRoute>
+              } />
+              
+              {/* Protected Routes - Wrapped with notification provider */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/game" element={
+                <ProtectedRoute>
+                  <Game />
+                </ProtectedRoute>
+              } />
+              <Route path="/leaderboard" element={
+                <ProtectedRoute>
+                  <Leaderboard />
+                </ProtectedRoute>
+              } />
+              
+              {/* Default Redirect */}
+              <Route path="/" element={<Navigate to="/dashboard" />} />
+            </Routes>
+          </PageTransition>
+        </NotificationProvider>
       </div>
 
       {/* Global UI Effects - Mobile optimized */}

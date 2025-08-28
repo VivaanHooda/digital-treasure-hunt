@@ -29,14 +29,8 @@ const NotificationHistory = ({ isOpen, onClose }) => {
       setLoading(true)
       const allNotifications = await getAllNotifications()
       
-      // Filter to only show notifications that were active after user joined
-      // or notifications that the user has interacted with
-      const userNotifications = allNotifications.filter(notification => {
-        // Show all notifications for simplicity - admin can see all, users see all too
-        return true
-      })
-      
-      setNotifications(userNotifications)
+      // Show all notifications for users (they can see their notification history)
+      setNotifications(allNotifications)
     } catch (error) {
       console.error('Error loading notification history:', error)
     } finally {

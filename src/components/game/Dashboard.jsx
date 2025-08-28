@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { getGameState, updateGameState, subscribeToGameSettings } from '../../firebase/collections'
-import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity } from 'lucide-react'
+import { getGameState, updateGameState, subscribeToGameSettings, getAllNotifications } from '../../firebase/collections'
+import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History } from 'lucide-react'
 import { formatTime, getGameTimeRemaining } from '../../utils/gameUtils'
+import NotificationHistory from '../common/NotificationHistory'
 
 const Dashboard = () => {
   const { currentUser, teamData, logout } = useAuth()
@@ -17,7 +18,25 @@ const Dashboard = () => {
   const [isVisible, setIsVisible] = useState(false)
   const [animatedScore, setAnimatedScore] = useState(0)
   const [gameOverShown, setGameOverShown] = useState(false)
+  const [showNotificationHistory, setShowNotificationHistory] = useState(false)
+  const [notificationCount, setNotificationCount] = useState(0)
   const scoreCounterRef = useRef(null)
+
+  // Load notification count
+  useEffect(() => {
+    const loadNotificationCount = async () => {
+      if (!currentUser?.uid || currentUser.email === 'vivaan.hooda@gmail.com') return
+      
+      try {
+        const allNotifications = await getAllNotifications()
+        setNotificationCount(allNotifications.length)
+      } catch (error) {
+        console.error('Error loading notification count:', error)
+      }
+    }
+
+    loadNotificationCount()
+  }, [currentUser])
 
   // Check if game has started
   const hasGameStarted = () => {
@@ -148,6 +167,10 @@ const Dashboard = () => {
     }
   }
 
+  const handleShowNotifications = () => {
+    setShowNotificationHistory(true)
+  }
+
   // Safe calculations with fallbacks
   const completedChallenges = gameState?.completedChallenges || []
   const progressPercentage = completedChallenges.length ? (completedChallenges.length / 40) * 100 : 0
@@ -178,13 +201,31 @@ const Dashboard = () => {
               <h1 className="text-lg sm:text-xl font-bold text-white">Command Center</h1>
             </div>
             
-            <button
-              onClick={handleLogout}
-              className="flex items-center px-3 sm:px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800/50 rounded-lg transition-all duration-300 group text-sm sm:text-base"
-            >
-              <LogOut className="h-4 w-4 mr-1 sm:mr-2 group-hover:scale-110 transition-transform" />
-              <span className="hidden xs:inline">Logout</span>
-            </button>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* Notification History Button - Only for non-admin users */}
+              {currentUser && currentUser.email !== 'vivaan.hooda@gmail.com' && (
+                <button
+                  onClick={handleShowNotifications}
+                  className="relative flex items-center px-3 sm:px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800/50 rounded-lg transition-all duration-300 group text-sm sm:text-base"
+                >
+                  <Bell className="h-4 w-4 mr-1 sm:mr-2 group-hover:scale-110 transition-transform" />
+                  <span className="hidden sm:inline">Notifications</span>
+                  {notificationCount > 0 && (
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                      <span className="text-xs text-white font-bold">{notificationCount > 9 ? '9+' : notificationCount}</span>
+                    </div>
+                  )}
+                </button>
+              )}
+              
+              <button
+                onClick={handleLogout}
+                className="flex items-center px-3 sm:px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800/50 rounded-lg transition-all duration-300 group text-sm sm:text-base"
+              >
+                <LogOut className="h-4 w-4 mr-1 sm:mr-2 group-hover:scale-110 transition-transform" />
+                <span className="hidden xs:inline">Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </nav>
@@ -473,6 +514,12 @@ const Dashboard = () => {
           ))}
         </div>
       </div>
+
+      {/* Notification History Modal */}
+      <NotificationHistory 
+        isOpen={showNotificationHistory} 
+        onClose={() => setShowNotificationHistory(false)} 
+      />
     </div>
   )
 }
