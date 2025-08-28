@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { COLLECTIONS, sendNotification, getAllNotifications, deactivateNotification, deleteNotification } from '../../firebase/collections'
+import { switchChallengeDataSet, getCurrentDataSet } from '../../data/challengeData'
 import { 
   Settings, 
   Clock, 
@@ -30,7 +31,10 @@ import {
   Send,
   History,
   Eye,
-  EyeOff
+  EyeOff,
+  Settings2,
+  Database,
+  Lock
 } from 'lucide-react'
 
 const AdminPage = () => {
@@ -57,6 +61,14 @@ const AdminPage = () => {
   const [resetPassword, setResetPassword] = useState('')
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Challenge Data Switcher states
+  const [showDataSwitcher, setShowDataSwitcher] = useState(false)
+  const [switcherPassword, setSwitcherPassword] = useState('')
+  const [currentDataSet, setCurrentDataSet] = useState('A')
+  const [switchingData, setSwitchingData] = useState(false)
+  const [showSwitcherModal, setShowSwitcherModal] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   // Load game settings
   useEffect(() => {
@@ -105,6 +117,20 @@ const AdminPage = () => {
     }
 
     loadGameSettings()
+  }, [])
+
+  // Load current dataset
+  useEffect(() => {
+    const loadCurrentDataSet = async () => {
+      try {
+        const current = await getCurrentDataSet()
+        setCurrentDataSet(current)
+      } catch (error) {
+        console.error('Error loading current dataset:', error)
+      }
+    }
+    
+    loadCurrentDataSet()
   }, [])
 
   const updateGameSettings = async (updates) => {
@@ -186,6 +212,42 @@ const AdminPage = () => {
     setLocalMinutes(Math.round((durationHours % 1) * 60))
     setHasChanges(false)
     setError(null)
+  }
+
+  // Challenge Data Switcher Functions
+  const handleSwitcherPasswordSubmit = () => {
+    if (switcherPassword === 'SumukhaISGreat') {
+      setShowDataSwitcher(true)
+      setShowSwitcherModal(true)
+      setSwitcherPassword('')
+      setError(null)
+    } else {
+      setError('Incorrect password for data switcher')
+      setSwitcherPassword('')
+    }
+  }
+
+  const handleDataSetSwitch = async (newSet) => {
+    try {
+      setSwitchingData(true)
+      setError(null)
+      
+      const success = await switchChallengeDataSet(newSet)
+      if (success) {
+        setCurrentDataSet(newSet)
+        setSuccess(`Challenge data switched to Set ${newSet}`)
+        setShowSwitcherModal(false)
+        setShowDataSwitcher(false)
+        setTimeout(() => setSuccess(null), 3000)
+      } else {
+        setError('Failed to switch challenge data')
+      }
+    } catch (error) {
+      console.error('Error switching challenge data:', error)
+      setError('Failed to switch challenge data: ' + error.message)
+    } finally {
+      setSwitchingData(false)
+    }
   }
 
   // Notification Functions
@@ -667,6 +729,15 @@ const AdminPage = () => {
                 )}
               </button>
 
+              {/* Challenge Data Switcher Button */}
+              <button
+                onClick={() => setShowSwitcherModal(true)}
+                className="w-full flex items-center justify-center px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105"
+              >
+                <Database className="w-5 h-5 mr-2" />
+                Switch Challenge Data ({currentDataSet})
+              </button>
+
               {/* Reset All Teams */}
               <button
                 onClick={() => setShowResetModal(true)}
@@ -780,6 +851,174 @@ const AdminPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Data Switcher Modal */}
+      {showSwitcherModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800/90 backdrop-blur-xl rounded-2xl border border-indigo-500/50 p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Database className="w-8 h-8 text-indigo-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Switch Challenge Data</h3>
+              <p className="text-gray-300 text-sm">
+                Current Set: <span className="font-semibold text-indigo-400">Set {currentDataSet}</span>
+              </p>
+            </div>
+
+            {!showDataSwitcher ? (
+              // Password Input
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Enter Security Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={switcherPassword}
+                      onChange={(e) => setSwitcherPassword(e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 bg-gray-900/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-indigo-400"
+                      placeholder="Enter password"
+                      onKeyPress={(e) => e.key === 'Enter' && handleSwitcherPasswordSubmit()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowSwitcherModal(false)
+                      setSwitcherPassword('')
+                      setShowDataSwitcher(false)
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSwitcherPasswordSubmit}
+                    disabled={!switcherPassword.trim()}
+                    className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
+                  >
+                    Unlock
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Dataset Selection
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div 
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      currentDataSet === 'A' 
+                        ? 'border-green-500 bg-green-500/10' 
+                        : 'border-gray-600 bg-gray-700/30 hover:border-gray-500'
+                    }`}
+                  >
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="challengeSet"
+                        value="A"
+                        checked={currentDataSet === 'A'}
+                        onChange={() => {}}
+                        className="w-4 h-4 text-green-500 mr-3"
+                      />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-white">Challenge Set A</h4>
+                        <p className="text-sm text-gray-400">Original challenge set with user-specific shuffling</p>
+                        <div className="flex items-center mt-2 space-x-4 text-xs">
+                          <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">20 Pictures</span>
+                          <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full">20 Riddles</span>
+                          <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-full">Randomized</span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div 
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      currentDataSet === 'B' 
+                        ? 'border-green-500 bg-green-500/10' 
+                        : 'border-gray-600 bg-gray-700/30 hover:border-gray-500'
+                    }`}
+                  >
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="challengeSet"
+                        value="B"
+                        checked={currentDataSet === 'B'}
+                        onChange={() => {}}
+                        className="w-4 h-4 text-green-500 mr-3"
+                      />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-white">Challenge Set B</h4>
+                        <p className="text-sm text-gray-400">Alternative challenge set with user-specific shuffling</p>
+                        <div className="flex items-center mt-2 space-x-4 text-xs">
+                          <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">20 Pictures</span>
+                          <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full">20 Riddles</span>
+                          <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-full">Radnomized</span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="text-yellow-400 mr-3 mt-0.5 flex-shrink-0 w-5 h-5" />
+                    <div>
+                      <p className="text-yellow-300 font-medium text-sm mb-1">Warning</p>
+                      <p className="text-yellow-400 text-xs">
+                        Switching challenge data will affect all new games. Existing games will continue with their current dataset.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowSwitcherModal(false)
+                      setShowDataSwitcher(false)
+                      setSwitcherPassword('')
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button
+                    onClick={() => handleDataSetSwitch('A')}
+                    disabled={switchingData || currentDataSet === 'A'}
+                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {switchingData && currentDataSet !== 'A' ? 'Switching...' : 'Set A'}
+                  </button>
+                  
+                  <button
+                    onClick={() => handleDataSetSwitch('B')}
+                    disabled={switchingData || currentDataSet === 'B'}
+                    className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {switchingData && currentDataSet !== 'B' ? 'Switching...' : 'Set B'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Notification History Modal */}
       {showNotificationHistory && (

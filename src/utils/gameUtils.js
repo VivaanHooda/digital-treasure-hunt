@@ -1,4 +1,7 @@
-import { getChallengesForUser, getChallengeById as getChallengeByIdFromData } from '../data/challengeData'
+// src/utils/gameUtils.js - Updated to work with dynamic challenge data
+
+// Import from the main challengeData file (which now handles switching)
+import { getChallengesForUser as getChallengesForUserDynamic, getChallengeById as getChallengeByIdDynamic } from '../data/challengeData'
 
 // Distance calculation using Haversine formula
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -29,13 +32,25 @@ export const verifyLocation = (userLat, userLng, challenge) => {
   };
 };
 
-// Export getChallengeById with userId parameter support
-export const getChallengeById = (id, userId = null) => {
-  return getChallengeByIdFromData(id, userId);
+// Async version of getChallengeById that works with dynamic data switching
+export const getChallengeById = async (id, userId = null) => {
+  try {
+    return await getChallengeByIdDynamic(id, userId);
+  } catch (error) {
+    console.error('Error getting challenge by ID:', error);
+    return null;
+  }
 };
 
-// Export getChallengesForUser from challengeData
-export { getChallengesForUser } from '../data/challengeData'
+// Async version of getChallengesForUser that works with dynamic data switching
+export const getChallengesForUser = async (userId) => {
+  try {
+    return await getChallengesForUserDynamic(userId);
+  } catch (error) {
+    console.error('Error getting challenges for user:', error);
+    return [];
+  }
+};
 
 // Game timer functions
 export const formatTime = (milliseconds) => {
@@ -114,12 +129,14 @@ export const getRemainingSkips = (gameStateOrSkipsUsed, maxSkips = 3) => {
   return Math.max(0, maxSkips - skipsUsed);
 };
 
-// Score calculation
-export const calculateTotalScore = (completedChallenges, userId = null) => {
-  return completedChallenges.reduce((total, challengeId) => {
-    const challenge = getChallengeById(challengeId, userId);
-    return total + (challenge?.points || 0);
-  }, 0);
+// Score calculation - Updated to be async
+export const calculateTotalScore = async (completedChallenges, userId = null) => {
+  let total = 0;
+  for (const challengeId of completedChallenges) {
+    const challenge = await getChallengeById(challengeId, userId);
+    total += challenge?.points || 0;
+  }
+  return total;
 };
 
 // Time formatting variants

@@ -1,6 +1,6 @@
-// Complete challenge data for your treasure hunt - Set B
+// Complete challenge data for your treasure hunt - Set B with user-specific randomization
 
-export const CHALLENGES_SET_B = [
+const ORIGINAL_CHALLENGES_SET_B = [
   {
     id: 0,
     type: 'riddle',
@@ -86,7 +86,7 @@ export const CHALLENGES_SET_B = [
     id: 6,
     type: 'riddle',
     title: 'Decode the Scene',
-    description: 'Where paper promises change their hands, Counters hum and value stands. Look for red above the door—your wise clue waits there.',
+    description: 'Where paper promises change their hands, Counters hum and value stands. Look for red above the doorâ€"your wise clue waits there.',
     targetLocation: {
       latitude: 12.92509375557992,
       longitude: 77.49938825337182,
@@ -167,7 +167,7 @@ export const CHALLENGES_SET_B = [
     id: 12,
     type: 'riddle',
     title: 'Decode the Scene',
-    description: 'Not a workshop, not a lab of flame, Here problems wear a binary name. Seek the halls where bugs are tamed—The home of code is where you aim.',
+    description: 'Not a workshop, not a lab of flame, Here problems wear a binary name. Seek the halls where bugs are tamedâ€"The home of code is where you aim.',
     targetLocation: {
       latitude: 12.924452156954706,
       longitude: 77.50010366686402,
@@ -194,7 +194,7 @@ export const CHALLENGES_SET_B = [
     id: 14,
     type: 'riddle',
     title: 'Decode the Scene',
-    description: 'Levels, plumbs and steady beams, Calculations shape their dreams. Look for the place that builds and plans—Your clue waits with steady hands.',
+    description: 'Levels, plumbs and steady beams, Calculations shape their dreams. Look for the place that builds and plansâ€"Your clue waits with steady hands.',
     targetLocation: {
       latitude: 12.924506428022577,
       longitude: 77.49946733802808,
@@ -314,7 +314,7 @@ export const CHALLENGES_SET_B = [
   {
     id: 23,
     type: 'picture',
-    title:'Look Closely, Seek Wisely',
+    title: 'Look Closely, Seek Wisely',
     description: '',
     imageUrl: '/images/challenges/Krishna Hostel.jpg',
     targetLocation: {
@@ -468,7 +468,7 @@ export const CHALLENGES_SET_B = [
     targetLocation: {
       latitude: 12.923207786576,
       longitude: 77.49789742453584,
-      name: 'RV–Toyota Centre of Excellence'
+      name: 'RVâ€"Toyota Centre of Excellence'
     },
     marginOfError: 20,
     points: 20
@@ -502,7 +502,83 @@ export const CHALLENGES_SET_B = [
   }
 ];
 
-// Helper function to get challenge by ID
-export const getChallengeById = (id) => {
-  return CHALLENGES_SET_B.find(challenge => challenge.id === id);
+// Simple seeded random number generator (LCG algorithm)
+function createSeededRandom(seed) {
+  let state = seed;
+  return function() {
+    state = (state * 1664525 + 1013904223) % Math.pow(2, 32);
+    return state / Math.pow(2, 32);
+  };
+}
+
+// Convert string to numeric seed
+function stringToSeed(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Fisher-Yates shuffle with seeded random
+function shuffleArray(array, seed) {
+  const shuffled = [...array];
+  const random = createSeededRandom(seed);
+  
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  return shuffled;
+}
+
+// Cache for shuffled challenges per user
+const userChallengesCache = new Map();
+
+// Get challenges shuffled for specific user
+export function getChallengesForUser(userId) {
+  if (!userId) {
+    console.warn('No userId provided, returning original order');
+    return ORIGINAL_CHALLENGES_SET_B;
+  }
+
+  // Check cache first
+  if (userChallengesCache.has(userId)) {
+    return userChallengesCache.get(userId);
+  }
+
+  // Generate seed from userId
+  const seed = stringToSeed(userId);
+  
+  // Shuffle challenges
+  const shuffled = shuffleArray(ORIGINAL_CHALLENGES_SET_B, seed);
+  
+  // Reassign IDs to match array indices (0-36)
+  const reindexed = shuffled.map((challenge, index) => ({
+    ...challenge,
+    id: index,
+    originalId: challenge.id // Keep track of original ID if needed
+  }));
+
+  // Cache the result
+  userChallengesCache.set(userId, reindexed);
+  
+  return reindexed;
+}
+
+// Maintain backward compatibility
+export const CHALLENGES_SET_B = ORIGINAL_CHALLENGES_SET_B;
+
+// Updated helper function to work with user-specific challenges
+export const getChallengeById = (id, userId = null) => {
+  if (userId) {
+    const userChallenges = getChallengesForUser(userId);
+    return userChallenges.find(challenge => challenge.id === id);
+  }
+  
+  // Fallback to original array if no userId provided
+  return ORIGINAL_CHALLENGES_SET_B.find(challenge => challenge.id === id);
 };

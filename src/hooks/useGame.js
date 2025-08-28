@@ -1,3 +1,5 @@
+// src/hooks/useGame.js - Updated to handle async challenge data loading
+
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './useAuth'
 import { getGameState, updateGameState, subscribeToGameSettings } from '../firebase/collections'
@@ -28,9 +30,9 @@ export const useGame = () => {
         const state = await getGameState(currentUser.uid)
         setGameState(state)
         
-        // Load current challenge
+        // Load current challenge asynchronously
         if (state?.currentChallenge !== undefined) {
-          const challenge = getChallengeById(state.currentChallenge, currentUser.uid)
+          const challenge = await getChallengeById(state.currentChallenge, currentUser.uid)
           setCurrentChallenge(challenge)
         }
       } catch (error) {
@@ -243,7 +245,7 @@ export const useGame = () => {
       const newScore = (gameState.score || 0) + currentChallenge.points
       const nextChallengeId = getNextChallengeId(newCompletedChallenges)
       
-      const isGameComplete = newCompletedChallenges.length >= 40 // 30 pictures + 10 riddles
+      const isGameComplete = newCompletedChallenges.length >= 40 // Total challenges
       
       const updatedState = {
         ...gameState,
@@ -262,9 +264,9 @@ export const useGame = () => {
       // Clear location error on success
       setLocationError(null)
 
-      // Load next challenge
+      // Load next challenge asynchronously
       if (!isGameComplete && nextChallengeId !== null) {
-        const nextChallenge = getChallengeById(nextChallengeId, currentUser.uid)
+        const nextChallenge = await getChallengeById(nextChallengeId, currentUser.uid)
         setCurrentChallenge(nextChallenge)
       } else {
         setCurrentChallenge(null)
@@ -316,9 +318,9 @@ export const useGame = () => {
       // Clear any errors
       setLocationError(null)
 
-      // Load next challenge
+      // Load next challenge asynchronously
       if (!isGameComplete && nextChallengeId !== null) {
-        const nextChallenge = getChallengeById(nextChallengeId, currentUser.uid)
+        const nextChallenge = await getChallengeById(nextChallengeId, currentUser.uid)
         setCurrentChallenge(nextChallenge)
       } else {
         setCurrentChallenge(null)
@@ -361,8 +363,8 @@ export const useGame = () => {
       await updateGameState(currentUser.uid, initialState)
       setGameState(initialState)
       
-      // Use user-specific challenges
-      const firstChallenge = getChallengeById(0, currentUser.uid)
+      // Load first challenge asynchronously
+      const firstChallenge = await getChallengeById(0, currentUser.uid)
       setCurrentChallenge(firstChallenge)
     } catch (error) {
       console.error('Error initializing game:', error)
@@ -398,8 +400,8 @@ export const useGame = () => {
     return Date.now() >= gameSettings.gameStartTime.toMillis()
   }
 
-  // Calculate challenge type statistics - FIXED
-  const calculateChallengeTypeStats = () => {
+  // Calculate challenge type statistics - FIXED to be async
+  const calculateChallengeTypeStats = async () => {
     if (!gameState?.completedChallenges || !currentUser?.uid) {
       return { picturesCompleted: 0, riddlesCompleted: 0 }
     }
@@ -407,8 +409,8 @@ export const useGame = () => {
     let picturesCompleted = 0
     let riddlesCompleted = 0
 
-    gameState.completedChallenges.forEach(challengeId => {
-      const challenge = getChallengeById(challengeId, currentUser.uid)
+    for (const challengeId of gameState.completedChallenges) {
+      const challenge = await getChallengeById(challengeId, currentUser.uid)
       if (challenge) {
         if (challenge.type === 'picture') {
           picturesCompleted++
@@ -416,12 +418,28 @@ export const useGame = () => {
           riddlesCompleted++
         }
       }
-    })
+    }
 
     return { picturesCompleted, riddlesCompleted }
   }
 
-  const challengeTypeStats = calculateChallengeTypeStats()
+  // Use state for challenge type stats since it's now async
+  const [challengeTypeStats, setChallengeTypeStats] = useState({ 
+    picturesCompleted: 0, 
+    riddlesCompleted: 0 
+  })
+
+  // Update challenge type stats when game state changes
+  useEffect(() => {
+    const updateStats = async () => {
+      if (gameState?.completedChallenges && currentUser?.uid) {
+        const stats = await calculateChallengeTypeStats()
+        setChallengeTypeStats(stats)
+      }
+    }
+    
+    updateStats()
+  }, [gameState?.completedChallenges, currentUser?.uid])
 
   return {
     // State

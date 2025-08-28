@@ -663,11 +663,11 @@ const Game = () => {
             <div className="flex justify-between text-xs sm:text-sm text-gray-400 mt-2 sm:mt-3">
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <Target className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
-                <span>Pictures: {correctedPicturesChallengesCompleted}/30</span>
+                <span>Pictures: {correctedPicturesChallengesCompleted}/20</span>
               </div>
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
-                <span>Riddles: {correctedRiddleChallengesCompleted}/10</span>
+                <span>Riddles: {correctedRiddleChallengesCompleted}/20</span>
               </div>
             </div>
           </div>
@@ -915,14 +915,14 @@ const Game = () => {
             { 
               icon: Target, 
               label: 'Pictures Found', 
-              value: `${correctedPicturesChallengesCompleted}/30`, 
+              value: `${correctedPicturesChallengesCompleted}/20`, 
               color: 'from-blue-500 to-cyan-600',
               textColor: 'text-blue-400'
             },
             { 
               icon: Zap, 
               label: 'Riddles Solved', 
-              value: `${correctedRiddleChallengesCompleted}/10`, 
+              value: `${correctedRiddleChallengesCompleted}/20`, 
               color: 'from-purple-500 to-pink-600',
               textColor: 'text-purple-400'
             },
