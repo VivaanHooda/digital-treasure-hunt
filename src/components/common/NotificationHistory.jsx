@@ -71,8 +71,8 @@ const NotificationHistory = ({ isOpen, onClose }) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800/90 backdrop-blur-xl rounded-2xl border border-gray-700/50 p-6 max-w-3xl w-full max-h-[80vh] overflow-hidden">
+    <div className="bg-black/80 backdrop-blur-sm min-h-screen flex flex-col">
+      <div className="bg-gray-800/90 backdrop-blur-xl border-b border-gray-700/50 p-6 max-w-5xl w-full mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
             <History className="w-6 h-6 text-blue-400 mr-3" />
@@ -86,7 +86,7 @@ const NotificationHistory = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div className="overflow-y-auto max-h-[60vh]">
+        <div className="overflow-y-auto max-h-[70vh]">
           {loading ? (
             <div className="text-center py-8">
               <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>

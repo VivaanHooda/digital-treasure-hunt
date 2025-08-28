@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { getGameState, updateGameState, subscribeToGameSettings, getAllNotifications } from '../../firebase/collections'
-import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History, AlertTriangle, Smartphone } from 'lucide-react'
+import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History, AlertTriangle, Smartphone, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatTime, getGameTimeRemaining } from '../../utils/gameUtils'
 import NotificationHistory from '../common/NotificationHistory'
 
@@ -20,7 +20,28 @@ const Dashboard = () => {
   const [gameOverShown, setGameOverShown] = useState(false)
   const [showNotificationHistory, setShowNotificationHistory] = useState(false)
   const [notificationCount, setNotificationCount] = useState(0)
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false)
   const scoreCounterRef = useRef(null)
+
+  // Department mapping function
+  const getDepartmentShortForm = (fullDepartment) => {
+    const departmentMap = {
+      'Computer Science & Engineering (AIML)': 'AIML',
+      'Computer Science & Engineering': 'CSE',
+      'Computer Science & Engineering (Data Science)': 'CD',
+      'Computer Science & Engineering (Cyber Security)': 'CY',
+      'Electronics & Communication Engineering': 'ECE',
+      'Electrical & Electronics Engineering': 'EEE',
+      'Electronics & Telecommunication Engineering': 'ET',
+      'Mechanical Engineering': 'ME',
+      'Aerospace Engineering': 'AS',
+      'Chemical Engineering': 'CH',
+      'Civil Engineering': 'CV',
+      'Biotechnology': 'BT',
+      'Industrial Engineering & Management': 'IEM'
+    }
+    return departmentMap[fullDepartment] || fullDepartment
+  }
 
   // Load notification count
   useEffect(() => {
@@ -376,32 +397,60 @@ const Dashboard = () => {
             </div>
             
             <div className="space-y-3 sm:space-y-4">
+              {/* Team Leader Info - Always visible */}
               <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
                 <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide">Team Leader</p>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mt-1">
                   <p className="text-white font-semibold text-sm sm:text-lg">{teamData?.teamLeaderName || 'N/A'}</p>
                   <div className="text-xs sm:text-sm">
                     <p className="text-cyan-400 font-mono">{teamData?.teamLeaderMobile || 'N/A'}</p>
-                    <p className="text-gray-400">{teamData?.teamLeaderDepartment || 'N/A'}</p>
+                    <p className="text-gray-400">{getDepartmentShortForm(teamData?.teamLeaderDepartment) || 'N/A'}</p>
                   </div>
                 </div>
               </div>
               
+              {/* Team Members - Dropdown */}
               <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4">
-                <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide mb-2 sm:mb-3">Team Members ({teamData?.totalMembers || 0})</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {teamData?.teamMembers?.map((member, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 bg-gray-600/20 rounded-lg hover:bg-gray-600/30 transition-colors">
-                      <span className="text-white font-medium text-sm sm:text-base">{member.name}</span>
-                      <div className="text-xs sm:text-sm">
-                        <span className="text-cyan-400 font-mono">{member.mobile}</span>
-                        <span className="text-gray-400 ml-2 sm:block">{member.department}</span>
-                      </div>
-                    </div>
-                  )) || (
-                    <div className="text-gray-400 text-center py-4 text-sm">No team members loaded</div>
-                  )}
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide">Team Members ({teamData?.totalMembers || 0})</p>
+                  <button
+                    onClick={() => setShowTeamDropdown(!showTeamDropdown)}
+                    className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors p-1"
+                  >
+                    {showTeamDropdown ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
+                
+                {/* Show member count when collapsed */}
+                {!showTeamDropdown && (
+                  <div className="text-center py-2">
+                    <p className="text-white text-sm">
+                      {teamData?.teamMembers?.length || 0} members
+                    </p>
+                    <p className="text-gray-400 text-xs">Click to view details</p>
+                  </div>
+                )}
+                
+                {/* Team members list - only show when expanded */}
+                {showTeamDropdown && (
+                  <div className="grid grid-cols-1 gap-2 animate-slideInDown">
+                    {teamData?.teamMembers?.map((member, index) => (
+                      <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 bg-gray-600/20 rounded-lg hover:bg-gray-600/30 transition-colors">
+                        <span className="text-white font-medium text-sm sm:text-base">{member.name}</span>
+                        <div className="text-xs sm:text-sm">
+                          <span className="text-cyan-400 font-mono">{member.mobile}</span>
+                          <span className="text-gray-400 ml-2 sm:block">{getDepartmentShortForm(member.department)}</span>
+                        </div>
+                      </div>
+                    )) || (
+                      <div className="text-gray-400 text-center py-4 text-sm">No team members loaded</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -548,11 +597,13 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Notification History Modal */}
-      <NotificationHistory 
-        isOpen={showNotificationHistory} 
-        onClose={() => setShowNotificationHistory(false)} 
-      />
+      {/* Notification History Modal - Positioned at top */}
+      <div className={`fixed inset-x-0 top-0 z-50 transform transition-transform duration-300 ${showNotificationHistory ? 'translate-y-0' : '-translate-y-full'}`}>
+        <NotificationHistory 
+          isOpen={showNotificationHistory} 
+          onClose={() => setShowNotificationHistory(false)} 
+        />
+      </div>
     </div>
   )
 }
