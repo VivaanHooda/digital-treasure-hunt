@@ -26,82 +26,6 @@ export const COLLECTIONS = {
   NOTIFICATIONS: 'notifications'
 };
 
-// Teams Collection Structure
-/*
-teams/{teamId} = {
-  teamLeaderEmail: string,
-  teamLeaderName: string,
-  teamMembers: [
-    { name: string, admissionNumber: string },
-    { name: string, admissionNumber: string },
-    ...
-  ],
-  createdAt: timestamp,
-  totalMembers: number (3-4 max)
-}
-*/
-
-// Game State Collection Structure  
-/*
-gameState/{teamId} = {
-  currentChallenge: number (0-39, 0-29 pictures, 30-39 riddles),
-  completedChallenges: [challengeIds],
-  score: number,
-  lastGuessTime: timestamp,
-  canGuess: boolean,
-  cooldownEnd: timestamp,
-  startTime: timestamp,
-  lastActivity: timestamp,
-  lastCompletedTime: timestamp, // when last challenge was completed
-  isGameComplete: boolean
-}
-*/
-
-// Challenges Collection Structure
-/*
-challenges/{challengeId} = {
-  id: number (0-39),
-  type: 'picture' | 'riddle',
-  title: string,
-  description: string,
-  imageUrl?: string, // for picture challenges
-  targetLocation: {
-    latitude: number,
-    longitude: number,
-    name: string
-  },
-  marginOfError: number, // in meters
-  points: number,
-  hint?: string
-}
-*/
-
-// Leaderboard Collection Structure
-/*
-leaderboard/{teamId} = {
-  teamName: string,
-  score: number,
-  completedChallenges: number,
-  lastUpdate: timestamp,
-  timeToComplete?: timestamp, // when they finished all challenges
-  isComplete: boolean
-}
-*/
-
-// Game Settings Collection Structure
-/*
-gameSettings/global = {
-  gameStartTime: timestamp,
-  gameDuration: number, // in milliseconds (2 hours)
-  isPaused: boolean,
-  pausedAt?: timestamp,
-  totalPauseTime: number, // accumulated pause time
-  isGameActive: boolean,
-  maxTeamSize: number (4),
-  minTeamSize: number (3)
-}
-*/
-
 // Helper Functions
 export const createTeam = async (teamId, teamData) => {
   try {
@@ -456,7 +380,7 @@ export const initializeGameSettings = async () => {
   }
 };
 
-// ADMIN FUNCTIONS - Added for admin functionality
+// ADMIN FUNCTIONS
 
 // Get game settings
 export const getGameSettings = async () => {
@@ -736,56 +660,48 @@ export const updateGameDuration = async (duration) => {
   }
 };
 
-// NOTIFICATION FUNCTIONS
+// NOTIFICATION FUNCTIONS - FIXED VERSION
 
-// Notifications Collection Structure
-/*
-notifications/{notificationId} = {
-  id: string (auto-generated),
-  message: string,
-  type: 'info' | 'warning' | 'success' | 'error',
-  title?: string,
-  createdAt: timestamp,
-  createdBy: string (admin email),
-  isActive: boolean,
-  expiresAt?: timestamp,
-  readBy: [userId1, userId2, ...] // array of user IDs who have read this notification
-}
-*/
-
-// Send notification to all users
+// Send notification to all users (broadcast)
 export const sendNotification = async (notificationData) => {
   try {
-    console.log('Sending notification:', notificationData);
+    console.log('Sending broadcast notification:', notificationData);
+    
+    // Create a unique ID for the notification
+    const notificationId = doc(collection(db, COLLECTIONS.NOTIFICATIONS)).id;
     
     const notification = {
       ...notificationData,
-      id: doc(collection(db, COLLECTIONS.NOTIFICATIONS)).id,
+      id: notificationId,
       createdAt: serverTimestamp(),
-      createdBy: 'vivaan.hooda@gmail.com',
+      createdBy: 'admin',
       isActive: true,
-      readBy: []
+      readBy: [], // Start with empty array
+      targetUser: 'all', // Broadcast to all users
+      lastUpdated: serverTimestamp()
     };
     
-    const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notification.id);
+    const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
     await setDoc(notificationRef, notification);
     
-    console.log('Notification sent successfully:', notification.id);
-    return notification;
+    console.log('Broadcast notification sent successfully with ID:', notificationId);
+    return {
+      ...notification,
+      id: notificationId
+    };
   } catch (error) {
     console.error('Error sending notification:', error);
     throw error;
   }
 };
 
-// Get all notifications
+// Get all notifications (admin function)
 export const getAllNotifications = async () => {
   try {
     console.log('Fetching all notifications...');
     
     const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS);
-    const q = query(notificationsRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(notificationsRef);
     
     const notifications = [];
     snapshot.docs.forEach(doc => {
@@ -793,6 +709,13 @@ export const getAllNotifications = async () => {
         id: doc.id,
         ...doc.data()
       });
+    });
+    
+    // Sort by createdAt in JavaScript (newest first)
+    notifications.sort((a, b) => {
+      const aTime = a.createdAt?.toDate?.() || new Date(0)
+      const bTime = b.createdAt?.toDate?.() || new Date(0)
+      return bTime - aTime
     });
     
     console.log('Found notifications:', notifications.length);
@@ -803,29 +726,43 @@ export const getAllNotifications = async () => {
   }
 };
 
-// Get active notifications for user
+// Get active notifications for user - FIXED VERSION (no composite index needed)
 export const getActiveNotifications = async (userId) => {
   try {
     console.log('Fetching active notifications for user:', userId);
     
+    // Skip admin users
+    if (userId === 'admin-user') {
+      console.log('Skipping notifications for admin user');
+      return [];
+    }
+    
     const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS);
-    const q = query(
-      notificationsRef, 
-      where('isActive', '==', true),
-      orderBy('createdAt', 'desc')
-    );
+    // Simple query - only filter by isActive (no orderBy to avoid composite index)
+    const q = query(notificationsRef, where('isActive', '==', true));
     const snapshot = await getDocs(q);
     
     const notifications = [];
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      // Only include notifications that haven't been read by this user
-      if (!data.readBy || !data.readBy.includes(userId)) {
+      const readBy = Array.isArray(data.readBy) ? data.readBy : [];
+      
+      // Only include notifications that:
+      // 1. Are for 'all' users (broadcast) OR specifically for this user
+      // 2. Haven't been read by this user
+      if ((data.targetUser === 'all' || data.targetUser === userId) && !readBy.includes(userId)) {
         notifications.push({
           id: doc.id,
           ...data
         });
       }
+    });
+    
+    // Sort by createdAt in JavaScript (newest first)
+    notifications.sort((a, b) => {
+      const aTime = a.createdAt?.toDate?.() || new Date(0)
+      const bTime = b.createdAt?.toDate?.() || new Date(0)
+      return bTime - aTime
     });
     
     console.log('Found active notifications for user:', notifications.length);
@@ -839,20 +776,27 @@ export const getActiveNotifications = async (userId) => {
 // Mark notification as read by user
 export const markNotificationAsRead = async (notificationId, userId) => {
   try {
-    console.log('Marking notification as read:', notificationId, userId);
+    console.log('Marking notification as read:', notificationId, 'for user:', userId);
     
     const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
     const notificationSnap = await getDoc(notificationRef);
     
     if (notificationSnap.exists()) {
       const data = notificationSnap.data();
-      const readBy = data.readBy || [];
+      const readBy = Array.isArray(data.readBy) ? data.readBy : [];
       
       if (!readBy.includes(userId)) {
         readBy.push(userId);
-        await updateDoc(notificationRef, { readBy });
-        console.log('Notification marked as read');
+        await updateDoc(notificationRef, { 
+          readBy,
+          lastUpdated: serverTimestamp()
+        });
+        console.log('Notification marked as read successfully');
+      } else {
+        console.log('Notification already marked as read by this user');
       }
+    } else {
+      console.warn('Notification not found:', notificationId);
     }
     
     return true;
@@ -862,24 +806,32 @@ export const markNotificationAsRead = async (notificationId, userId) => {
   }
 };
 
-// Subscribe to active notifications for real-time updates
+// Subscribe to active notifications - FIXED VERSION (no composite index needed)
 export const subscribeToActiveNotifications = (userId, callback) => {
   console.log('Setting up active notifications subscription for user:', userId);
   
+  // Skip admin users
+  if (userId === 'admin-user') {
+    console.log('Skipping subscription for admin user');
+    callback([]);
+    return () => {}; // Return empty unsubscribe function
+  }
+  
   const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS);
-  const q = query(
-    notificationsRef, 
-    where('isActive', '==', true),
-    orderBy('createdAt', 'desc')
-  );
+  // Simple query - only filter by isActive (no orderBy to avoid composite index)
+  const q = query(notificationsRef, where('isActive', '==', true));
   
   return onSnapshot(q, (snapshot) => {
     try {
       const notifications = [];
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        // Only include notifications that haven't been read by this user
-        if (!data.readBy || !data.readBy.includes(userId)) {
+        const readBy = Array.isArray(data.readBy) ? data.readBy : [];
+        
+        // Only include notifications that:
+        // 1. Are for 'all' users (broadcast) OR specifically for this user
+        // 2. Haven't been read by this user
+        if ((data.targetUser === 'all' || data.targetUser === userId) && !readBy.includes(userId)) {
           notifications.push({
             id: doc.id,
             ...data
@@ -887,13 +839,22 @@ export const subscribeToActiveNotifications = (userId, callback) => {
         }
       });
       
-      console.log('Active notifications updated:', notifications.length);
+      // Sort by createdAt in JavaScript (newest first)
+      notifications.sort((a, b) => {
+        const aTime = a.createdAt?.toDate?.() || new Date(0)
+        const bTime = b.createdAt?.toDate?.() || new Date(0)
+        return bTime - aTime
+      });
+      
+      console.log('Active notifications updated for user:', userId, '- Count:', notifications.length);
       callback(notifications);
     } catch (error) {
       console.error('Error in notifications subscription:', error);
+      callback([]); // Return empty array on error
     }
   }, (error) => {
     console.error('Notifications subscription error:', error);
+    callback([]); // Return empty array on error
   });
 };
 
@@ -903,7 +864,10 @@ export const deactivateNotification = async (notificationId) => {
     console.log('Deactivating notification:', notificationId);
     
     const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
-    await updateDoc(notificationRef, { isActive: false });
+    await updateDoc(notificationRef, { 
+      isActive: false,
+      lastUpdated: serverTimestamp()
+    });
     
     console.log('Notification deactivated successfully');
     return true;
@@ -913,18 +877,34 @@ export const deactivateNotification = async (notificationId) => {
   }
 };
 
-// Delete notification (admin function)
+// Delete notification permanently (admin function)
 export const deleteNotification = async (notificationId) => {
   try {
-    console.log('Deleting notification:', notificationId);
+    console.log('Permanently deleting notification:', notificationId);
     
     const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
     await deleteDoc(notificationRef);
     
-    console.log('Notification deleted successfully');
+    console.log('Notification deleted successfully from all users');
     return true;
   } catch (error) {
     console.error('Error deleting notification:', error);
+    throw error;
+  }
+};
+
+// Clear notification from ALL users' history (admin function)
+export const clearNotificationFromAllUsers = async (notificationId) => {
+  try {
+    console.log('Clearing notification from all users:', notificationId);
+    
+    // Delete it completely so it doesn't appear in anyone's history
+    await deleteNotification(notificationId);
+    
+    console.log('Notification cleared from all users successfully');
+    return true;
+  } catch (error) {
+    console.error('Error clearing notification from all users:', error);
     throw error;
   }
 };
