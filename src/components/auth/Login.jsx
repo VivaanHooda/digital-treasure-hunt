@@ -67,7 +67,7 @@ const Login = () => {
   ]
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-3 sm:px-4 py-8 sm:py-12 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-12 relative overflow-hidden">
       
       {/* Floating Elements - Reduced count and optimized for mobile */}
       <div className="absolute inset-0 pointer-events-none">
@@ -86,7 +86,7 @@ const Login = () => {
       </div>
 
       <div className={`
-        max-w-sm sm:max-w-md w-full transition-all duration-1000 transform
+        max-w-sm sm:max-w-md w-full transition-all duration-1000 transform flex-grow flex flex-col justify-center
         ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}
       `}>
         
@@ -242,6 +242,36 @@ const Login = () => {
               </Link>
             </div>
           </form>
+        </div>
+
+        {/* Bottom Logos */}
+        <div className={`
+          mt-6 sm:mt-8 flex items-center justify-center space-x-8 sm:space-x-12 transition-all duration-1000 delay-500 transform
+          ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}
+        `}>
+          <div className="group">
+            <img 
+              src="/images/logos/RVSmall.png" 
+              alt="RV Logo" 
+              className="h-16 sm:h-20 w-auto opacity-70 hover:opacity-100 transition-opacity duration-300 group-hover:scale-110 transform transition-transform"
+              onError={(e) => {
+                console.warn('RV Logo not found at /images/logos/RVSmall.png');
+                e.target.style.display = 'none';
+              }}
+            />
+          </div>
+          <div className="w-px h-16 sm:h-20 bg-gray-600/50"></div>
+          <div className="group">
+            <img 
+              src="/images/logos/CCWhite.png" 
+              alt="CC Logo" 
+              className="h-20 sm:h-24 w-auto opacity-70 hover:opacity-100 transition-opacity duration-300 group-hover:scale-110 transform transition-transform"
+              onError={(e) => {
+                console.warn('CC Logo not found at /images/logos/CCWhite.png');
+                e.target.style.display = 'none';
+              }}
+            />
+          </div>
         </div>
 
         {/* Game Rules - Responsive padding and text */}
