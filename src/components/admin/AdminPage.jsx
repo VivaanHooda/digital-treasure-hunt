@@ -34,7 +34,8 @@ import {
   EyeOff,
   Settings2,
   Database,
-  Lock
+  Lock,
+  Download
 } from 'lucide-react'
 
 const AdminPage = () => {
@@ -69,6 +70,9 @@ const AdminPage = () => {
   const [switchingData, setSwitchingData] = useState(false)
   const [showSwitcherModal, setShowSwitcherModal] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  // CSV Download state
+  const [downloadingCSV, setDownloadingCSV] = useState(false)
 
   // Load game settings
   useEffect(() => {
@@ -247,6 +251,111 @@ const AdminPage = () => {
       setError('Failed to switch challenge data: ' + error.message)
     } finally {
       setSwitchingData(false)
+    }
+  }
+
+  // CSV Download Function
+  const handleDownloadAttendanceReport = async () => {
+    try {
+      setDownloadingCSV(true)
+      setError(null)
+
+      console.log('Starting CSV download...')
+      
+      // Fetch all teams
+      const teamsRef = collection(db, COLLECTIONS.TEAMS)
+      const teamsSnapshot = await getDocs(teamsRef)
+      
+      console.log('Teams fetched:', teamsSnapshot.docs.length)
+
+      // Prepare CSV data
+      const csvData = []
+      const headers = [
+        'Team ID',
+        'Team Leader Name', 
+        'Team Leader Email',
+        'Member 1 Name',
+        'Member 1 Email',
+        'Member 2 Name', 
+        'Member 2 Email',
+        'Member 3 Name',
+        'Member 3 Email',
+        'Registration Date'
+      ]
+      
+      csvData.push(headers)
+
+      // Process each team
+      teamsSnapshot.docs.forEach(doc => {
+        const teamData = doc.data()
+        const teamMembers = teamData.teamMembers || []
+        
+        const row = [
+          doc.id,
+          teamData.teamLeaderName || '',
+          teamData.teamLeaderEmail || '',
+          teamMembers[0]?.name || '',
+          teamMembers[0]?.email || '',
+          teamMembers[1]?.name || '',
+          teamMembers[1]?.email || '',
+          teamMembers[2]?.name || '',
+          teamMembers[2]?.email || '',
+          teamData.createdAt?.toDate?.()?.toLocaleString() || teamData.createdAt || 'Unknown'
+        ]
+        
+        csvData.push(row)
+      })
+
+      console.log('CSV data prepared, rows:', csvData.length)
+
+      // Convert to CSV string
+      const csvContent = csvData.map(row => 
+        row.map(field => {
+          // Escape quotes and wrap in quotes if field contains comma, quote, or newline
+          const fieldStr = String(field || '')
+          if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
+            return '"' + fieldStr.replace(/"/g, '""') + '"'
+          }
+          return fieldStr
+        }).join(',')
+      ).join('\n')
+
+      console.log('CSV content created, length:', csvContent.length)
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob)
+        link.setAttribute('href', url)
+        
+        // Generate filename with current date
+        const now = new Date()
+        const dateStr = now.getFullYear() + '-' + 
+                       String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(now.getDate()).padStart(2, '0') + '_' + 
+                       String(now.getHours()).padStart(2, '0') + '-' + 
+                       String(now.getMinutes()).padStart(2, '0')
+        
+        link.setAttribute('download', `treasure_hunt_attendance_${dateStr}.csv`)
+        link.style.visibility = 'hidden'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        
+        setSuccess(`Attendance report downloaded! (${csvData.length - 1} teams)`)
+        setTimeout(() => setSuccess(null), 5000)
+      } else {
+        setError('Download not supported in this browser')
+      }
+
+    } catch (error) {
+      console.error('Error downloading attendance report:', error)
+      setError('Failed to download attendance report: ' + error.message)
+    } finally {
+      setDownloadingCSV(false)
     }
   }
 
@@ -725,6 +834,25 @@ const AdminPage = () => {
                   <>
                     <Pause className="w-5 h-5 mr-2" />
                     Pause Game
+                  </>
+                )}
+              </button>
+
+              {/* Download Attendance Report */}
+              <button
+                onClick={handleDownloadAttendanceReport}
+                disabled={downloadingCSV}
+                className="w-full flex items-center justify-center px-6 py-4 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloadingCSV ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                    Generating CSV...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    Download Attendance Report
                   </>
                 )}
               </button>

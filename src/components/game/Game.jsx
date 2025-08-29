@@ -29,29 +29,6 @@ import {
   Heart
 } from 'lucide-react'
 
-// Helper function to calculate challenge type stats
-const getChallengeTypeStats = (completedChallengeIds, userId) => {
-  if (!completedChallengeIds || !userId) {
-    return { picturesCompleted: 0, riddlesCompleted: 0 };
-  }
-
-  let picturesCompleted = 0;
-  let riddlesCompleted = 0;
-
-  completedChallengeIds.forEach(challengeId => {
-    const challenge = getChallengeById(challengeId, userId);
-    if (challenge) {
-      if (challenge.type === 'picture') {
-        picturesCompleted++;
-      } else if (challenge.type === 'riddle') {
-        riddlesCompleted++;
-      }
-    }
-  });
-
-  return { picturesCompleted, riddlesCompleted };
-};
-
 // Success Popup Component - Mobile Optimized
 const SuccessPopup = ({ message, onNext, isVisible }) => {
   if (!isVisible) return null
@@ -182,6 +159,10 @@ const Game = () => {
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showReadyNotification, setShowReadyNotification] = useState(false)
+  
+  // Fixed challenge type stats calculation
+  const [correctedPicturesChallengesCompleted, setCorrectedPicturesChallengesCompleted] = useState(0)
+  const [correctedRiddleChallengesCompleted, setCorrectedRiddleChallengesCompleted] = useState(0)
 
   // Check if mobile
   useEffect(() => {
@@ -194,14 +175,46 @@ const Game = () => {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Calculate challenge type statistics correctly
+  useEffect(() => {
+    const calculateChallengeTypeStats = async () => {
+      if (!gameState?.completedChallenges || !currentUser?.uid) {
+        setCorrectedPicturesChallengesCompleted(0)
+        setCorrectedRiddleChallengesCompleted(0)
+        return
+      }
+
+      let picturesCompleted = 0
+      let riddlesCompleted = 0
+
+      for (const challengeId of gameState.completedChallenges) {
+        try {
+          const challenge = await getChallengeById(challengeId, currentUser.uid)
+          if (challenge) {
+            if (challenge.type === 'picture') {
+              picturesCompleted++
+            } else if (challenge.type === 'riddle') {
+              riddlesCompleted++
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching challenge:', error)
+        }
+      }
+
+      setCorrectedPicturesChallengesCompleted(picturesCompleted)
+      setCorrectedRiddleChallengesCompleted(riddlesCompleted)
+    }
+
+    calculateChallengeTypeStats()
+  }, [gameState?.completedChallenges, currentUser?.uid])
+
   // Get skip-related data
   const remainingSkips = getRemainingSkips(gameState?.skipsUsed || 0)
   const canSkip = canUseSkip(gameState?.skipsUsed || 0)
 
-  // Calculate challenge type statistics
-  const challengeTypeStats = getChallengeTypeStats(gameState?.completedChallenges, currentUser?.uid);
-  const correctedPicturesChallengesCompleted = challengeTypeStats.picturesCompleted;
-  const correctedRiddleChallengesCompleted = challengeTypeStats.riddlesCompleted;
+  // Calculate correct mission score (base score minus skip penalties)
+  const correctMissionScore = Math.max(0, (gameState?.score || 0) - ((gameState?.skipsUsed || 0) * 5))
 
   // Initialize game if needed
   useEffect(() => {
@@ -532,7 +545,7 @@ const Game = () => {
           </p>
           <div className="bg-gray-800/50 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
             <p className="text-4xl sm:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-2">
-              {Math.max(0, (gameState.score || 0) - (gameState.skipsUsed || 0) * 5)}
+              {correctMissionScore}
             </p>
             <p className="text-gray-400 text-sm sm:text-base">Final Mission Score</p>
           </div>
@@ -713,7 +726,7 @@ const Game = () => {
               
               <div className="text-center sm:text-right">
                 <p className="text-3xl sm:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-                  {Math.max(0, (gameState?.score || 0) - (gameState?.skipsUsed || 0) * 5)}
+                  {correctMissionScore}
                 </p>
                 <p className="text-gray-400 text-xs sm:text-sm uppercase tracking-wide">Mission Score</p>
               </div>
@@ -908,7 +921,7 @@ const Game = () => {
             { 
               icon: Trophy, 
               label: 'Mission Score', 
-              value: Math.max(0, (gameState?.score || 0) - (gameState?.skipsUsed || 0) * 5), 
+              value: correctMissionScore, 
               color: 'from-yellow-500 to-orange-600',
               textColor: 'text-yellow-400'
             },

@@ -18,8 +18,6 @@ const Register = () => {
     teamMembers: [
       { name: '', mobile: '', department: '' },
       { name: '', mobile: '', department: '' },
-      { name: '', mobile: '', department: '' },
-      { name: '', mobile: '', department: '' },
       { name: '', mobile: '', department: '' }
     ]
   })
@@ -105,13 +103,13 @@ const Register = () => {
       errors.teamLeaderDepartment = 'Team leader department is required'
     }
 
-    // Validate all 5 team members (exactly 6 total including leader)
+    // Validate all 3 team members (exactly 4 total including leader)
     const validMembers = formData.teamMembers.filter(member => 
       member.name.trim() && member.mobile.trim() && member.department.trim()
     )
     
-    if (validMembers.length !== 5) {
-      errors.teamMembers = 'All 5 team members are required (6 total including team leader)'
+    if (validMembers.length !== 3) {
+      errors.teamMembers = 'All 3 team members are required (4 total including team leader)'
     }
 
     // Check for duplicate mobile numbers including leader's
@@ -190,7 +188,7 @@ const Register = () => {
     { icon: Target, label: '30 Pictures', color: 'text-cyan-400' },
     { icon: Zap, label: '10 Riddles', color: 'text-purple-400' },
     { icon: Clock, label: '2 Hours', color: 'text-green-400' },
-    { icon: Users, label: '6 Members', color: 'text-yellow-400' }
+    { icon: Users, label: '4 Members', color: 'text-yellow-400' }
   ]
 
   return (
@@ -543,7 +541,7 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Team Members Section - Fixed to 5 members */}
+            {/* Team Members Section - Fixed to 3 members */}
             <div className="space-y-4 sm:space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div className="flex items-center space-x-2 sm:space-x-3">
@@ -551,11 +549,11 @@ const Register = () => {
                     <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   </div>
                   <h3 className="text-lg sm:text-xl font-semibold text-white">
-                    Team Members (5 Required)
+                    Team Members (3 Required)
                   </h3>
                 </div>
                 <div className="text-sm text-gray-400 bg-gray-700/30 px-3 py-1 rounded-full">
-                  Total: 6 members (including leader)
+                  Total: 4 members (including leader)
                 </div>
               </div>
 
@@ -713,7 +711,7 @@ const Register = () => {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {[
-              'Team must have exactly 6 members (including leader)',
+              'Team must have exactly 4 members (including leader)',
               'One team leader manages the account',  
               'All members need unique mobile numbers',
               'Team leader receives all communications',

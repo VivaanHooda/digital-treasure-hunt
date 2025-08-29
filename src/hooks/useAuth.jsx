@@ -44,9 +44,9 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Team information is required for regular registration');
       }
 
-      // Validate team members (exactly 5 members, total 6 including leader)
-      if (teamInfo.teamMembers.length !== 5) {
-        throw new Error('Team must have exactly 5 members (6 total including team leader)');
+      // Validate team members (exactly 3 members, total 4 including leader)
+      if (teamInfo.teamMembers.length !== 3) {
+        throw new Error('Team must have exactly 3 members (4 total including team leader)');
       }
 
       // Validate that all team members have required fields
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
           mobile: member.mobile.trim(),
           department: member.department.trim()
         })),
-        totalMembers: 6 // Always 6 (leader + 5 members)
+        totalMembers: 4 // Always 4 (leader + 3 members)
       };
 
       const teamCreated = await createTeam(user.uid, teamData);

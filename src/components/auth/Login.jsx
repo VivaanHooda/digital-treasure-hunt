@@ -63,7 +63,7 @@ const Login = () => {
     { icon: Target, label: '20 Pictures', color: 'text-cyan-400' },
     { icon: Zap, label: '20 Riddles', color: 'text-purple-400' },
     { icon: Clock, label: '2 Hours', color: 'text-green-400' },
-    { icon: Users, label: '6 Members', color: 'text-yellow-400' }
+    { icon: Users, label: '4 Members', color: 'text-yellow-400' }
   ]
 
   return (
@@ -117,7 +117,7 @@ const Login = () => {
             <div>
               <p className="text-orange-300 font-medium text-sm mb-1">Single Device Login</p>
               <p className="text-orange-400 text-sm">
-                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device will automatically log out the previous session.
+                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device is prohibited.
               </p>
             </div>
           </div>
@@ -295,7 +295,7 @@ const Login = () => {
           </h3>
           <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-gray-300">
             {[
-              'Teams of exactly 6 members only',
+              'Teams of exactly 4 members only',
               '1-minute cooldown between guesses',  
               '2-hour time limit for entire game',
               'Visit locations physically to verify'
