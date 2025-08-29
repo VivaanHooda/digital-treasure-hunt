@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { getGameState, updateGameState, subscribeToGameSettings, getAllNotifications } from '../../firebase/collections'
+import { getChallengeById } from '../../utils/gameUtils' // Added import
 import { MapPin, Users, Trophy, Clock, Play, Pause, LogOut, Target, Zap, Award, Activity, Bell, History, AlertTriangle, Smartphone, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatTime, getGameTimeRemaining } from '../../utils/gameUtils'
 import NotificationHistory from '../common/NotificationHistory'
@@ -21,6 +22,11 @@ const Dashboard = () => {
   const [showNotificationHistory, setShowNotificationHistory] = useState(false)
   const [notificationCount, setNotificationCount] = useState(0)
   const [showTeamDropdown, setShowTeamDropdown] = useState(false)
+  
+  // Added states for correct challenge type counting
+  const [correctedPicturesChallengesCompleted, setCorrectedPicturesChallengesCompleted] = useState(0)
+  const [correctedRiddleChallengesCompleted, setCorrectedRiddleChallengesCompleted] = useState(0)
+  
   const scoreCounterRef = useRef(null)
 
   // Department mapping function
@@ -42,6 +48,40 @@ const Dashboard = () => {
     }
     return departmentMap[fullDepartment] || fullDepartment
   }
+
+  // Calculate challenge type statistics correctly - NEW LOGIC FROM GAME.JSX
+  useEffect(() => {
+    const calculateChallengeTypeStats = async () => {
+      if (!gameState?.completedChallenges || !currentUser?.uid) {
+        setCorrectedPicturesChallengesCompleted(0)
+        setCorrectedRiddleChallengesCompleted(0)
+        return
+      }
+
+      let picturesCompleted = 0
+      let riddlesCompleted = 0
+
+      for (const challengeId of gameState.completedChallenges) {
+        try {
+          const challenge = await getChallengeById(challengeId, currentUser.uid)
+          if (challenge) {
+            if (challenge.type === 'picture') {
+              picturesCompleted++
+            } else if (challenge.type === 'riddle') {
+              riddlesCompleted++
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching challenge:', error)
+        }
+      }
+
+      setCorrectedPicturesChallengesCompleted(picturesCompleted)
+      setCorrectedRiddleChallengesCompleted(riddlesCompleted)
+    }
+
+    calculateChallengeTypeStats()
+  }, [gameState?.completedChallenges, currentUser?.uid])
 
   // Load notification count
   useEffect(() => {
@@ -192,11 +232,12 @@ const Dashboard = () => {
     setShowNotificationHistory(true)
   }
 
-  // Safe calculations with fallbacks
+  // Safe calculations with fallbacks - UPDATED TO USE CORRECT COUNTERS
   const completedChallenges = gameState?.completedChallenges || []
   const progressPercentage = completedChallenges.length ? (completedChallenges.length / 40) * 100 : 0
-  const picturesCompleted = completedChallenges.filter(id => id < 30).length
-  const riddlesCompleted = completedChallenges.filter(id => id >= 30).length
+  // Use the corrected counters instead of the old logic
+  const picturesCompleted = correctedPicturesChallengesCompleted
+  const riddlesCompleted = correctedRiddleChallengesCompleted
 
   if (loading) {
     return (
