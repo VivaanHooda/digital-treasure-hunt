@@ -2,6 +2,13 @@
 
 A modern, location-based treasure hunt application built with React and Firebase, designed for educational institutions and team-building events. Players navigate through picture-based challenges and riddles while physically visiting campus locations.
 
+[![React](https://img.shields.io/badge/React-19-blue)](https://reactjs.org/)
+[![Vite](https://img.shields.io/badge/Vite-5.0-646CFF)](https://vitejs.dev/)
+[![Firebase](https://img.shields.io/badge/Firebase-10.14-orange)](https://firebase.google.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC)](https://tailwindcss.com/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![PWA](https://img.shields.io/badge/PWA-Ready-purple)](https://web.dev/progressive-web-apps/)
+
 ## 🌟 Features
 
 ### 🎮 Core Gameplay
@@ -245,7 +252,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **Location Verification Logic**: Inspired by [RaghottamNadgoudar](https://github.com/RaghottamNadgoudar)'s implementation
-- **Contributors**: All developers who helped improve this project : [RaghottamNadgoudar](https://github.com/RaghottamNadgoudar), [Snehal Reddy Thadigotla](https://github.com/A5CENSION-SRT), [Sumukha Upadhyaya](https://github.com/overclocked-2124), [Vidisha Dewan](https://github.com/Vidisha231106)
+- **Contributors**: All developers who helped improve this project : [Raghottam](https://github.com/RaghottamNadgoudar), [Snehal](https://github.com/A5CENSION-SRT), [Sumukha](https://github.com/overclocked-2124), [Vidisha](https://github.com/Vidisha231106)
+- - **Coding Club RVCE** - Project initiative and support
 
 ## 📞 Support
 
@@ -254,5 +262,6 @@ For support and questions:
 - Contact [Vivaan Hooda](https://github.com/VivaanHooda) - [LinkedIn](https://www.linkedin.com/in/vivaanhooda/)
 
 ---
-
-**Built with ❤️ for educational institutions and team-building events**
+<p align="center">
+<strong> Built with ❤️ for educational institutions and team-building events </strong>
+</p>
