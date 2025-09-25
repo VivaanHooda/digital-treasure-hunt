@@ -254,7 +254,7 @@ const AdminPage = () => {
     }
   }
 
-  // CSV Download Function
+  // UPDATED CSV Download Function - Only changes are in this function
   const handleDownloadAttendanceReport = async () => {
     try {
       setDownloadingCSV(true)
@@ -268,18 +268,24 @@ const AdminPage = () => {
       
       console.log('Teams fetched:', teamsSnapshot.docs.length)
 
-      // Prepare CSV data
+      // Prepare CSV data with updated headers
       const csvData = []
       const headers = [
         'Team ID',
+        'Team Name',
         'Team Leader Name', 
         'Team Leader Email',
+        'Team Leader Phone',
+        'Team Leader Department',
         'Member 1 Name',
-        'Member 1 Email',
+        'Member 1 Phone',
+        'Member 1 Department',
         'Member 2 Name', 
-        'Member 2 Email',
+        'Member 2 Phone',
+        'Member 2 Department',
         'Member 3 Name',
-        'Member 3 Email',
+        'Member 3 Phone',
+        'Member 3 Department',
         'Registration Date'
       ]
       
@@ -292,14 +298,20 @@ const AdminPage = () => {
         
         const row = [
           doc.id,
+          teamData.teamName || '',
           teamData.teamLeaderName || '',
-          teamData.teamLeaderEmail || '',
+          teamData.teamLeaderEmail || '', // Only team leader's email
+          teamData.teamLeaderMobile || '',
+          teamData.teamLeaderDepartment || '',
           teamMembers[0]?.name || '',
-          teamMembers[0]?.email || '',
+          teamMembers[0]?.mobile || '', // Phone number instead of email
+          teamMembers[0]?.department || '',
           teamMembers[1]?.name || '',
-          teamMembers[1]?.email || '',
+          teamMembers[1]?.mobile || '', // Phone number instead of email
+          teamMembers[1]?.department || '',
           teamMembers[2]?.name || '',
-          teamMembers[2]?.email || '',
+          teamMembers[2]?.mobile || '', // Phone number instead of email
+          teamMembers[2]?.department || '',
           teamData.createdAt?.toDate?.()?.toLocaleString() || teamData.createdAt || 'Unknown'
         ]
         
