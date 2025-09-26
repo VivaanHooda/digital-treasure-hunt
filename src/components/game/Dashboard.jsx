@@ -583,7 +583,7 @@ const Dashboard = () => {
             <div>
               <p className="text-orange-300 font-medium text-sm sm:text-base mb-1">Device Login Policy</p>
               <p className="text-orange-400 text-xs sm:text-sm">
-                Only <strong>1 device is allowed to login at a time</strong>. Logging in from another device will automatically log out the previous session. Ensure your team uses only one device for the treasure hunt.
+                Only <strong>1 device is allowed to login at a time</strong>. Ensure your team uses only one device.
               </p>
             </div>
           </div>

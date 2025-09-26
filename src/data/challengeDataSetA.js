@@ -1,4 +1,5 @@
-// Complete challenge data for your treasure hunt - Set A with user-specific randomization
+// Complete challenge data for your treasure hunt - Set A with FIXED user-specific randomization
+// FIXED VERSION - Eliminates "Challenge Data Missing" and "Same Question Loop" bugs
 
 // Challenge Set A
 // 20 Picture Challenges + 20 Riddle Challenges
@@ -546,29 +547,36 @@ export const ORIGINAL_CHALLENGES_SET_A = [
   }
 ];
 
-// Simple seeded random number generator (LCG algorithm)
+// ===============================================
+// FIXED RANDOMIZATION SYSTEM
+// ===============================================
+
+// Robust seeded random number generator (Mulberry32)
 function createSeededRandom(seed) {
-  let state = seed;
   return function() {
-    state = (state * 1664525 + 1013904223) % Math.pow(2, 32);
-    return state / Math.pow(2, 32);
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
 
-// Convert string to numeric seed
+// Convert string to robust numeric seed
 function stringToSeed(str) {
   let hash = 0;
+  if (str.length === 0) return hash;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  return Math.abs(hash);
+  // Ensure positive seed
+  return Math.abs(hash) + 1;
 }
 
-// Fisher-Yates shuffle with seeded random
-function shuffleArray(array, seed) {
-  const shuffled = [...array];
+// Deterministic Fisher-Yates shuffle
+function deterministicShuffle(array, seed) {
+  const shuffled = [...array]; // Deep copy to avoid mutation
   const random = createSeededRandom(seed);
   
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -579,50 +587,248 @@ function shuffleArray(array, seed) {
   return shuffled;
 }
 
-// Cache for shuffled challenges per user
+// ===============================================
+// THREAD-SAFE CACHING SYSTEM
+// ===============================================
+
+// Global cache with user-specific locks
 const userChallengesCache = new Map();
+const userProcessingLocks = new Map();
 
-// Get challenges shuffled for specific user
-export function getChallengesForUser(userId) {
-  if (!userId) {
-    console.warn('No userId provided, returning original order');
-    return ORIGINAL_CHALLENGES_SET_A;
-  }
-
-  // Check cache first
+// Thread-safe challenge loader
+async function loadUserChallengesThreadSafe(userId) {
+  // Return cached version if available
   if (userChallengesCache.has(userId)) {
     return userChallengesCache.get(userId);
   }
 
-  // Generate seed from userId
-  const seed = stringToSeed(userId);
-  
-  // Shuffle challenges
-  const shuffled = shuffleArray(ORIGINAL_CHALLENGES_SET_A, seed);
-  
-  // Reassign IDs to match array indices (0-39)
-  const reindexed = shuffled.map((challenge, index) => ({
-    ...challenge,
-    id: index,
-    originalId: challenge.id // Keep track of original ID if needed
-  }));
+  // Check if another thread is processing this user
+  if (userProcessingLocks.has(userId)) {
+    // Wait for other thread to complete
+    await userProcessingLocks.get(userId);
+    return userChallengesCache.get(userId);
+  }
 
-  // Cache the result
-  userChallengesCache.set(userId, reindexed);
-  
-  return reindexed;
+  // Create processing lock for this user
+  let resolveLock;
+  const lockPromise = new Promise(resolve => {
+    resolveLock = resolve;
+  });
+  userProcessingLocks.set(userId, lockPromise);
+
+  try {
+    // Generate deterministic seed from userId
+    const seed = stringToSeed(userId);
+    
+    // Create shuffled challenges with original IDs preserved
+    const shuffledChallenges = deterministicShuffle(ORIGINAL_CHALLENGES_SET_A, seed);
+    
+    // Reassign sequential IDs while preserving original data
+    const reindexedChallenges = shuffledChallenges.map((challenge, index) => ({
+      ...challenge, // Preserve ALL original data
+      id: index,    // New sequential ID (0-39)
+      originalId: challenge.id, // Keep track of original ID
+      userId: userId, // Add user identifier
+      shuffleSeed: seed // Store seed for debugging
+    }));
+
+    // Validate all challenges are present
+    if (reindexedChallenges.length !== 40) {
+      throw new Error(`Invalid challenge count: ${reindexedChallenges.length}, expected 40`);
+    }
+
+    // Validate no duplicate IDs
+    const ids = reindexedChallenges.map(c => c.id);
+    const uniqueIds = new Set(ids);
+    if (uniqueIds.size !== 40) {
+      throw new Error(`Duplicate challenge IDs detected`);
+    }
+
+    // Validate all challenges have required properties
+    for (const challenge of reindexedChallenges) {
+      if (!challenge.title || !challenge.description || !challenge.targetLocation) {
+        throw new Error(`Invalid challenge data at ID ${challenge.id}`);
+      }
+    }
+
+    // Store in cache
+    userChallengesCache.set(userId, reindexedChallenges);
+    
+    console.log(`✅ Successfully loaded ${reindexedChallenges.length} challenges for user: ${userId}`);
+    return reindexedChallenges;
+    
+  } catch (error) {
+    console.error(`❌ Error loading challenges for user ${userId}:`, error);
+    throw error;
+  } finally {
+    // Release lock
+    userProcessingLocks.delete(userId);
+    resolveLock();
+  }
 }
+
+// ===============================================
+// PUBLIC API FUNCTIONS
+// ===============================================
+
+// Get challenges shuffled for specific user
+export async function getChallengesForUser(userId) {
+  // Validate userId
+  if (!userId || typeof userId !== 'string') {
+    console.warn('❌ Invalid userId provided, returning original order');
+    return ORIGINAL_CHALLENGES_SET_A.map((challenge, index) => ({
+      ...challenge,
+      id: index,
+      originalId: challenge.id
+    }));
+  }
+
+  try {
+    return await loadUserChallengesThreadSafe(userId);
+  } catch (error) {
+    console.error('❌ Failed to get challenges for user, falling back to original order:', error);
+    // Fallback to original order if shuffling fails
+    return ORIGINAL_CHALLENGES_SET_A.map((challenge, index) => ({
+      ...challenge,
+      id: index,
+      originalId: challenge.id,
+      fallback: true
+    }));
+  }
+}
+
+// Get specific challenge by ID for a user
+export async function getChallengeById(id, userId = null) {
+  // Validate ID
+  if (typeof id !== 'number' || id < 0 || id >= 40) {
+    console.error(`❌ Invalid challenge ID: ${id}`);
+    return null;
+  }
+
+  try {
+    if (userId) {
+      // Get user-specific shuffled challenges
+      const userChallenges = await getChallengesForUser(userId);
+      const challenge = userChallenges.find(challenge => challenge.id === id);
+      
+      if (!challenge) {
+        console.error(`❌ Challenge with ID ${id} not found for user ${userId}`);
+        return null;
+      }
+      
+      return challenge;
+    } else {
+      // Fallback to original array if no userId provided
+      const challenge = ORIGINAL_CHALLENGES_SET_A.find(challenge => challenge.id === id);
+      
+      if (!challenge) {
+        console.error(`❌ Challenge with original ID ${id} not found`);
+        return null;
+      }
+      
+      return {
+        ...challenge,
+        originalId: challenge.id,
+        fallback: true
+      };
+    }
+  } catch (error) {
+    console.error(`❌ Error getting challenge by ID ${id}:`, error);
+    return null;
+  }
+}
+
+// ===============================================
+// UTILITY FUNCTIONS
+// ===============================================
+
+// Clear cache for a specific user (useful for testing)
+export function clearUserCache(userId) {
+  if (userChallengesCache.has(userId)) {
+    userChallengesCache.delete(userId);
+    console.log(`🧹 Cleared cache for user: ${userId}`);
+  }
+}
+
+// Clear all caches (admin function)
+export function clearAllCaches() {
+  userChallengesCache.clear();
+  userProcessingLocks.clear();
+  console.log('🧹 Cleared all challenge caches');
+}
+
+// Get cache statistics (admin function)
+export function getCacheStats() {
+  return {
+    cachedUsers: userChallengesCache.size,
+    processingUsers: userProcessingLocks.size,
+    totalChallenges: ORIGINAL_CHALLENGES_SET_A.length
+  };
+}
+
+// Validate challenge data integrity
+export function validateChallengeData() {
+  const issues = [];
+  
+  // Check total count
+  if (ORIGINAL_CHALLENGES_SET_A.length !== 40) {
+    issues.push(`Invalid total count: ${ORIGINAL_CHALLENGES_SET_A.length}, expected 40`);
+  }
+  
+  // Check for duplicate IDs
+  const ids = ORIGINAL_CHALLENGES_SET_A.map(c => c.id);
+  const uniqueIds = new Set(ids);
+  if (uniqueIds.size !== 40) {
+    issues.push('Duplicate IDs found');
+  }
+  
+  // Check each challenge
+  ORIGINAL_CHALLENGES_SET_A.forEach((challenge, index) => {
+    if (challenge.id !== index) {
+      issues.push(`Challenge at index ${index} has incorrect ID: ${challenge.id}`);
+    }
+    
+    if (!challenge.title || !challenge.description) {
+      issues.push(`Challenge ${challenge.id} missing title or description`);
+    }
+    
+    if (!challenge.targetLocation || !challenge.targetLocation.latitude || !challenge.targetLocation.longitude) {
+      issues.push(`Challenge ${challenge.id} missing valid location`);
+    }
+    
+    if (!challenge.type || (challenge.type !== 'picture' && challenge.type !== 'riddle')) {
+      issues.push(`Challenge ${challenge.id} has invalid type: ${challenge.type}`);
+    }
+    
+    if (typeof challenge.points !== 'number' || challenge.points <= 0) {
+      issues.push(`Challenge ${challenge.id} has invalid points: ${challenge.points}`);
+    }
+  });
+  
+  return {
+    isValid: issues.length === 0,
+    issues: issues,
+    totalChallenges: ORIGINAL_CHALLENGES_SET_A.length
+  };
+}
+
+// ===============================================
+// BACKWARD COMPATIBILITY EXPORTS
+// ===============================================
 
 // Maintain backward compatibility
 export const CHALLENGES_SET_A = ORIGINAL_CHALLENGES_SET_A;
 
-// Updated helper function to work with user-specific challenges
-export const getChallengeById = (id, userId = null) => {
-  if (userId) {
-    const userChallenges = getChallengesForUser(userId);
-    return userChallenges.find(challenge => challenge.id === id);
+// Export validation function for immediate use
+export function runValidation() {
+  const validation = validateChallengeData();
+  if (validation.isValid) {
+    console.log('✅ Challenge data validation passed');
+  } else {
+    console.error('❌ Challenge data validation failed:', validation.issues);
   }
-  
-  // Fallback to original array if no userId provided
-  return ORIGINAL_CHALLENGES_SET_A.find(challenge => challenge.id === id);
-};
+  return validation;
+}
+
+// Auto-run validation on module load
+runValidation();

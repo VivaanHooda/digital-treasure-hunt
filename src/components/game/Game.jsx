@@ -999,18 +999,6 @@ const Game = () => {
           </div>
         </div>
 
-        {/* Floating Action Hints - Removed except for hint button */}
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 flex flex-col space-y-2 sm:space-y-3 z-10 max-w-[200px]">
-          {currentChallenge.type === 'riddle' && !showHint && (
-            <button
-              onClick={() => setShowHint(true)}
-              className="bg-yellow-500/20 backdrop-blur-sm border border-yellow-500/50 rounded-full px-3 py-2 text-yellow-300 text-xs sm:text-sm hover:bg-yellow-500/30 transition-colors min-h-[36px]"
-            >
-              💡 Need help?
-            </button>
-          )}
-        </div>
-
         {/* Ready to Verify Notification */}
         {showReadyNotification && (
           <div className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 animate-slideInRight">

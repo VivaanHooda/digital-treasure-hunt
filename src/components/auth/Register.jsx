@@ -185,8 +185,8 @@ const Register = () => {
   }
 
   const stats = [
-    { icon: Target, label: '30 Pictures', color: 'text-cyan-400' },
-    { icon: Zap, label: '10 Riddles', color: 'text-purple-400' },
+    { icon: Target, label: '20 Pictures', color: 'text-cyan-400' },
+    { icon: Zap, label: '20 Riddles', color: 'text-purple-400' },
     { icon: Clock, label: '2 Hours', color: 'text-green-400' },
     { icon: Users, label: '4 Members', color: 'text-yellow-400' }
   ]
