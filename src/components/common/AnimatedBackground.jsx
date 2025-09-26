@@ -226,7 +226,7 @@ const AnimatedBackground = () => {
       ></div>
 
       {/* CSS for grid animation - Smaller movement on mobile */}
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes gridMove {
           0% { transform: translate(0, 0); }
           100% { transform: translate(30px, 30px); }
@@ -241,7 +241,7 @@ const AnimatedBackground = () => {
             100% { transform: translate(50px, 50px); }
           }
         }
-      `}</style>
+      ` }} />
     </>
   )
 }
