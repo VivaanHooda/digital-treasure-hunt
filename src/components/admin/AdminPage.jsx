@@ -1276,7 +1276,7 @@ const AdminPage = () => {
 
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Enter Vivaan Hooda's best friend's name:
+                Enter Security Password:
               </label>
               <input
                 type="text"
