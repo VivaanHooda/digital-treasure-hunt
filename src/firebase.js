@@ -6,13 +6,13 @@ import { getAnalytics } from "firebase/analytics";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC4qKSZKVc1kuEHVZBuhiaxpM94HA_9Aog",
-  authDomain: "siptreasurehunt.firebaseapp.com",
-  projectId: "siptreasurehunt",
-  storageBucket: "siptreasurehunt.firebasestorage.app",
-  messagingSenderId: "986165750222",
-  appId: "1:986165750222:web:daa5fb78d98851728a239f",
-  measurementId: "G-Y3787NBDY9"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase

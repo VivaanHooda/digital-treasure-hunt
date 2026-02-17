@@ -41,8 +41,11 @@ const Login = () => {
     
     if (!validateForm()) return
 
-    // HARDCODED ADMIN CHECK - Check credentials before Firebase
-    if (formData.email === 'vivaan.hooda@gmail.com' && formData.password === 'hooda@123') {
+    // Admin check - Check credentials before Firebase
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD
+    
+    if (formData.email === adminEmail && formData.password === adminPassword) {
       console.log('Admin credentials detected - bypassing Firebase auth')
       // Set a flag to indicate admin mode and redirect directly
       sessionStorage.setItem('isAdmin', 'true')

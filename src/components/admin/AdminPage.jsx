@@ -220,7 +220,8 @@ const AdminPage = () => {
 
   // Challenge Data Switcher Functions
   const handleSwitcherPasswordSubmit = () => {
-    if (switcherPassword === 'SumukhaISGreat') {
+    const correctPassword = import.meta.env.VITE_DATA_SWITCHER_PASSWORD
+    if (switcherPassword === correctPassword) {
       setShowDataSwitcher(true)
       setShowSwitcherModal(true)
       setSwitcherPassword('')
@@ -483,7 +484,8 @@ const AdminPage = () => {
   }
 
   const handleResetAllTeams = async () => {
-    if (resetPassword !== 'snehalreddy') {
+    const correctPassword = import.meta.env.VITE_RESET_TEAMS_PASSWORD
+    if (resetPassword !== correctPassword) {
       setError('Incorrect password')
       return
     }
@@ -494,7 +496,8 @@ const AdminPage = () => {
 
       // Get all teams except admin
       const teamsRef = collection(db, COLLECTIONS.TEAMS)
-      const teamsQuery = query(teamsRef, where('teamLeaderEmail', '!=', 'vivaan.hooda@gmail.com'))
+      const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
+      const teamsQuery = query(teamsRef, where('teamLeaderEmail', '!=', adminEmail))
       const teamsSnapshot = await getDocs(teamsQuery)
 
       // Get all game states
@@ -505,7 +508,7 @@ const AdminPage = () => {
       const allTeamsSnapshot = await getDocs(teamsRef)
       const adminTeamIds = []
       allTeamsSnapshot.docs.forEach(doc => {
-        if (doc.data().teamLeaderEmail === 'vivaan.hooda@gmail.com') {
+        if (doc.data().teamLeaderEmail === adminEmail) {
           adminTeamIds.push(doc.id)
         }
       })
