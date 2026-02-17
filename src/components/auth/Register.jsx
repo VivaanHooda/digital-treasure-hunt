@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { Plus, Trash2, Users, Mail, Lock, User, Phone, MapPin, Trophy, Zap, Target, Clock, UserPlus, Eye, EyeOff, AlertTriangle, GraduationCap } from 'lucide-react'
+import Particles from '../common/Particles'
 
 const Register = () => {
   const { register, error, loading } = useAuth()
@@ -194,6 +195,21 @@ const Register = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-12 relative overflow-hidden">
       
+      {/* Particles Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <Particles
+          particleColors={["#01b2fe"]}
+          particleCount={700}
+          particleSpread={10}
+          speed={0.2}
+          particleBaseSize={100}
+          moveParticlesOnHover={false}
+          alphaParticles={false}
+          disableRotation={false}
+          pixelRatio={1}
+        />
+      </div>
+
       {/* Animated Background - Mobile optimized */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -inset-10 opacity-30 sm:opacity-50">

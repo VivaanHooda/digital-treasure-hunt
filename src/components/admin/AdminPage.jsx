@@ -14,6 +14,7 @@ import {
 import { db } from '../../firebase'
 import { COLLECTIONS, sendNotification, getAllNotifications, deactivateNotification, deleteNotification } from '../../firebase/collections'
 import { switchChallengeDataSet, getCurrentDataSet } from '../../data/challengeData'
+import Particles from '../common/Particles'
 import { 
   Settings, 
   Clock, 
@@ -26,7 +27,6 @@ import {
   XCircle,
   RefreshCw,
   Shield,
-  ArrowLeft,
   Bell,
   Send,
   History,
@@ -588,23 +588,29 @@ const AdminPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative">
+      {/* Particles Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <Particles
+          particleColors={["#01b2fe"]}
+          particleCount={700}
+          particleSpread={10}
+          speed={0.2}
+          particleBaseSize={100}
+          moveParticlesOnHover={false}
+          alphaParticles={false}
+          disableRotation={false}
+          pixelRatio={1}
+        />
+      </div>
+
       {/* Header */}
       <nav className="bg-gray-900/90 backdrop-blur-xl border-b border-gray-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center text-gray-300 hover:text-white hover:bg-gray-800/50 px-3 py-2 rounded-lg transition-all duration-300 group mr-4"
-              >
-                <ArrowLeft className="h-5 w-5 mr-2 group-hover:scale-110 transition-transform" />
-                <span className="text-sm">Back</span>
-              </button>
-              <div className="flex items-center">
-                <Shield className="w-8 h-8 text-red-500 mr-3" />
-                <h1 className="text-xl font-bold text-white">Admin Control Panel</h1>
-              </div>
+              <Shield className="w-8 h-8 text-red-500 mr-3" />
+              <h1 className="text-xl font-bold text-white">Admin Control Panel</h1>
             </div>
             <button
               onClick={handleLogout}
@@ -637,34 +643,36 @@ const AdminPage = () => {
         )}
 
         {/* Game Status Indicators */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Game Active Status */}
-          <div className="bg-gray-800/30 backdrop-blur-xl rounded-2xl border border-gray-700/50 p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  gameSettings?.isGameActive ? 'bg-green-500/20' : 'bg-red-500/20'
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Game Active Status - Commented Out */}
+          {false && (
+            <div className="bg-gray-800/30 backdrop-blur-xl rounded-2xl border border-gray-700/50 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    gameSettings?.isGameActive ? 'bg-green-500/20' : 'bg-red-500/20'
+                  }`}>
+                    {gameSettings?.isGameActive ? (
+                      <Play className="w-6 h-6 text-green-400" />
+                    ) : (
+                      <XCircle className="w-6 h-6 text-red-400" />
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-white font-semibold">Game Status</h3>
+                    <p className="text-gray-400 text-sm">Overall game state</p>
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  gameSettings?.isGameActive 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-red-500/20 text-red-400'
                 }`}>
-                  {gameSettings?.isGameActive ? (
-                    <Play className="w-6 h-6 text-green-400" />
-                  ) : (
-                    <XCircle className="w-6 h-6 text-red-400" />
-                  )}
+                  {gameSettings?.isGameActive ? 'ACTIVE' : 'INACTIVE'}
                 </div>
-                <div className="ml-4">
-                  <h3 className="text-white font-semibold">Game Status</h3>
-                  <p className="text-gray-400 text-sm">Overall game state</p>
-                </div>
-              </div>
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                gameSettings?.isGameActive 
-                  ? 'bg-green-500/20 text-green-400' 
-                  : 'bg-red-500/20 text-red-400'
-              }`}>
-                {gameSettings?.isGameActive ? 'ACTIVE' : 'INACTIVE'}
               </div>
             </div>
-          </div>
+          )}
 
           {/* Pause Status */}
           <div className="bg-gray-800/30 backdrop-blur-xl rounded-2xl border border-gray-700/50 p-6">
@@ -771,23 +779,25 @@ const AdminPage = () => {
                 </p>
               </div>
 
-              {/* Game Active Toggle */}
-              <div>
-                <label className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-300">Game Active</span>
-                  <button
-                    onClick={() => updateGameSettings({ isGameActive: !gameSettings?.isGameActive })}
-                    disabled={updating}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 ${
-                      gameSettings?.isGameActive ? 'bg-cyan-600' : 'bg-gray-600'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      gameSettings?.isGameActive ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </label>
-              </div>
+              {/* Game Active Toggle - Commented Out */}
+              {false && (
+                <div>
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-300">Game Active</span>
+                    <button
+                      onClick={() => updateGameSettings({ isGameActive: !gameSettings?.isGameActive })}
+                      disabled={updating}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 ${
+                        gameSettings?.isGameActive ? 'bg-cyan-600' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        gameSettings?.isGameActive ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </label>
+                </div>
+              )}
 
               {/* Save/Discard Buttons */}
               {hasChanges && (
