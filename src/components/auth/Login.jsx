@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { Mail, Lock, MapPin, Trophy, Zap, Target, Clock, Users, AlertTriangle, Smartphone } from 'lucide-react'
+import Particles from '../common/Particles'
 
 const Login = () => {
   const { login, error, loading } = useAuth()
@@ -72,20 +73,19 @@ const Login = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-12 relative overflow-hidden">
       
-      {/* Floating Elements - Reduced count and optimized for mobile */}
+      {/* Particles Background */}
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(window.innerWidth < 768 ? 8 : 15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1.5 h-1.5 sm:w-2 sm:h-2 bg-cyan-400/30 rounded-full animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${3 + Math.random() * 4}s`
-            }}
-          ></div>
-        ))}
+        <Particles
+          particleColors={["#01b2fe"]}
+          particleCount={700}
+          particleSpread={10}
+          speed={0.2}
+          particleBaseSize={100}
+          moveParticlesOnHover={false}
+          alphaParticles={false}
+          disableRotation={false}
+          pixelRatio={1}
+        />
       </div>
 
       <div className={`
