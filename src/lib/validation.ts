@@ -1,0 +1,59 @@
+import { z } from "zod";
+import { ApiError } from "@/lib/api";
+
+const nonEmpty = z.string().trim().min(1).max(120);
+const mobile = z.string().trim().min(7).max(20);
+
+const memberSchema = z.object({
+  name: nonEmpty,
+  mobile,
+  department: nonEmpty,
+});
+
+export const registerSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(200),
+  password: z.string().min(8).max(200),
+  teamName: nonEmpty,
+  leaderName: nonEmpty,
+  leaderMobile: mobile,
+  leaderDepartment: nonEmpty,
+  // Exactly 3 members (4 total including the leader).
+  members: z.array(memberSchema).length(3),
+});
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+// Geolocation submitted for verification.
+export const verifySchema = z.object({
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  accuracy: z.number().finite().nonnegative().optional(),
+});
+
+export const notificationSchema = z.object({
+  title: z.string().trim().max(120).optional(),
+  message: z.string().trim().min(1).max(1000),
+  type: z.enum(["info", "warning", "success", "error"]).default("info"),
+});
+
+export const pauseSchema = z.object({ paused: z.boolean() }).strict();
+
+export const settingsSchema = z
+  .object({
+    startTime: z.string().datetime().optional(),
+    durationMs: z.number().int().positive().max(86_400_000).optional(),
+    selectedDataset: z.enum(["A", "B"]).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict();
+
+/** Parse `data` against `schema`, throwing a 400 ApiError on failure. */
+export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const msg = result.error.issues
+      .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+      .join("; ");
+    throw new ApiError(400, msg, "VALIDATION_ERROR");
+  }
+  return result.data;
+}

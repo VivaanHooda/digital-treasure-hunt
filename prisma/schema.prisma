@@ -1,0 +1,196 @@
+// Treasure Hunt — relational schema (replaces Firestore collections).
+// Only the Next.js server touches this DB; clients never connect directly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Dataset {
+  A
+  B
+}
+
+enum ChallengeType {
+  PICTURE
+  RIDDLE
+}
+
+enum NotificationType {
+  info
+  warning
+  success
+  error
+}
+
+// A login account. Team leaders are USER; the single admin is ADMIN.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  // Bumped to invalidate all existing JWTs (logout-all / forced revocation).
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  team          Team?
+  gameState     GameState?
+  notifications Notification[]     @relation("NotificationAuthor")
+  reads         NotificationRead[]
+
+  @@index([role])
+}
+
+model Team {
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamName         String
+  leaderName       String
+  leaderMobile     String
+  leaderDepartment String
+  createdAt        DateTime     @default(now())
+  members          TeamMember[]
+}
+
+model TeamMember {
+  id         String @id @default(cuid())
+  teamId     String
+  team       Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name       String
+  mobile     String
+  department String
+}
+
+// Per-user game progress. Score/progress are written only by the server.
+model GameState {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Dataset is frozen at game creation so an admin switch never corrupts a game in progress.
+  datasetId       Dataset
+  // Server-held per-user ordering of challenge indexes (the shuffle).
+  challengeOrder  Int[]
+  currentIndex    Int       @default(0)
+  score           Int       @default(0)
+  skipsUsed       Int       @default(0)
+  cooldownEndsAt  DateTime?
+  startedAt       DateTime  @default(now())
+  lastCompletedAt DateTime?
+  lastActivityAt  DateTime  @default(now())
+  isComplete      Boolean   @default(false)
+
+  completions Completion[]
+  skips       Skip[]
+  submissions Submission[]
+
+  @@index([score, lastCompletedAt])
+}
+
+// A successfully solved challenge (true completions, separate from skips).
+model Completion {
+  id             String    @id @default(cuid())
+  gameStateId    String
+  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeIndex Int
+  pointsAwarded  Int
+  completedAt    DateTime  @default(now())
+
+  @@unique([gameStateId, challengeIndex])
+}
+
+// A skipped challenge (consumes the slot but is not a completion).
+model Skip {
+  id             String    @id @default(cuid())
+  gameStateId    String
+  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeIndex Int
+  penalty        Int
+  skippedAt      DateTime  @default(now())
+
+  @@unique([gameStateId, challengeIndex])
+}
+
+// Audit trail of every verification attempt (anti-cheat / forensics).
+model Submission {
+  id             String    @id @default(cuid())
+  gameStateId    String
+  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeIndex Int
+  latitude       Float
+  longitude      Float
+  accuracy       Float?
+  distance       Float
+  success        Boolean
+  createdAt      DateTime  @default(now())
+
+  @@index([gameStateId, createdAt])
+}
+
+// The challenge catalog. Coordinates live here and are NEVER sent to the client.
+model Challenge {
+  id            String        @id @default(cuid())
+  datasetId     Dataset
+  index         Int
+  type          ChallengeType
+  title         String
+  description   String
+  imageUrl      String?
+  latitude      Float
+  longitude     Float
+  marginOfError Int
+  points        Int
+
+  @@unique([datasetId, index])
+}
+
+// Single global settings row (id = "global").
+model GameSettings {
+  id              String   @id @default("global")
+  startTime       DateTime
+  durationMs      Int
+  isPaused        Boolean  @default(false)
+  pausedAt        DateTime?
+  totalPauseMs    Int      @default(0)
+  isActive        Boolean  @default(true)
+  selectedDataset Dataset  @default(A)
+  maxTeamSize     Int      @default(4)
+  minTeamSize     Int      @default(3)
+  updatedAt       DateTime @updatedAt
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  title       String
+  message     String
+  type        NotificationType @default(info)
+  isActive    Boolean          @default(true)
+  createdById String?
+  createdBy   User?            @relation("NotificationAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+
+  reads NotificationRead[]
+
+  @@index([isActive, createdAt])
+}
+
+// Replaces the readBy[] array — a row per (notification, user) dismissal.
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
+}
