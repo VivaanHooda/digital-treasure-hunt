@@ -37,3 +37,7 @@ next-env.d.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Uploaded challenge images
+/public/uploads/*
+!/public/uploads/.gitkeep

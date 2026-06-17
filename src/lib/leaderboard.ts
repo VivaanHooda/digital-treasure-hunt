@@ -5,6 +5,7 @@ export type LeaderboardEntry = {
   teamName: string;
   score: number;
   completedCount: number;
+  total: number;
   isComplete: boolean;
   lastCompletedAt: string | null;
 };
@@ -21,6 +22,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       score: true,
       isComplete: true,
       lastCompletedAt: true,
+      challengeIds: true,
       user: { select: { team: { select: { teamName: true } } } },
       _count: { select: { completions: true } },
     },
@@ -36,6 +38,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
     teamName: s.user.team?.teamName ?? "Unknown Team",
     score: s.score,
     completedCount: s._count.completions,
+    total: s.challengeIds.length,
     isComplete: s.isComplete,
     lastCompletedAt: s.lastCompletedAt?.toISOString() ?? null,
   }));

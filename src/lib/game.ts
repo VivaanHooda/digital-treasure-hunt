@@ -4,13 +4,7 @@ import { ApiError } from "@/lib/api";
 import { events } from "@/lib/events";
 import { computeTime } from "@/lib/time";
 import { haversineMeters, round2 } from "@/lib/geo";
-import {
-  TOTAL_CHALLENGES,
-  COOLDOWN_MS,
-  SKIP_PENALTY,
-  MAX_SKIPS,
-  MAX_ACCURACY_MULTIPLIER,
-} from "@/lib/config";
+import { COOLDOWN_MS, SKIP_PENALTY, MAX_SKIPS, MAX_ACCURACY_MULTIPLIER } from "@/lib/config";
 
 // ---------------------------------------------------------------------------
 // Settings + time
@@ -38,10 +32,11 @@ function assertPlayable(settings: GameSettings, time: ReturnType<typeof computeT
 function sanitizeChallenge(
   c: { type: string; title: string; description: string; imageUrl: string | null; points: number; marginOfError: number },
   position: number,
+  total: number,
 ) {
   return {
     number: position + 1,
-    total: TOTAL_CHALLENGES,
+    total,
     type: c.type,
     title: c.title,
     description: c.description,
@@ -60,21 +55,27 @@ export async function getGameStateForUser(userId: string) {
 
   const now = Date.now();
   const time = computeTime(settings, now);
+  const total = gs.challengeIds.length;
 
-  const [completions, skippedCount] = await Promise.all([
-    prisma.completion.findMany({
-      where: { gameStateId: gs.id },
-      select: { challengeIndex: true },
-    }),
+  const [completions, skippedCount, byType] = await Promise.all([
+    prisma.completion.findMany({ where: { gameStateId: gs.id }, select: { challengeId: true } }),
     prisma.skip.count({ where: { gameStateId: gs.id } }),
+    prisma.challenge.groupBy({
+      by: ["type"],
+      where: { datasetId: gs.datasetId },
+      _count: { _all: true },
+    }),
   ]);
+
+  const pictureTotal = byType.find((b) => b.type === "PICTURE")?._count._all ?? 0;
+  const riddleTotal = byType.find((b) => b.type === "RIDDLE")?._count._all ?? 0;
 
   // Picture/riddle breakdown of completed challenges.
   let pictures = 0;
   let riddles = 0;
   if (completions.length) {
     const types = await prisma.challenge.findMany({
-      where: { datasetId: gs.datasetId, index: { in: completions.map((c) => c.challengeIndex) } },
+      where: { id: { in: completions.map((c) => c.challengeId) } },
       select: { type: true },
     });
     pictures = types.filter((t) => t.type === "PICTURE").length;
@@ -83,12 +84,9 @@ export async function getGameStateForUser(userId: string) {
 
   // Current challenge (no coordinates).
   let challenge = null;
-  if (!gs.isComplete && gs.currentIndex < TOTAL_CHALLENGES) {
-    const actualIndex = gs.challengeOrder[gs.currentIndex];
-    const c = await prisma.challenge.findUnique({
-      where: { datasetId_index: { datasetId: gs.datasetId, index: actualIndex } },
-    });
-    if (c) challenge = sanitizeChallenge(c, gs.currentIndex);
+  if (!gs.isComplete && gs.currentIndex < total) {
+    const c = await prisma.challenge.findUnique({ where: { id: gs.challengeIds[gs.currentIndex] } });
+    if (c) challenge = sanitizeChallenge(c, gs.currentIndex, total);
   }
 
   const cooldownRemaining = gs.cooldownEndsAt
@@ -108,8 +106,8 @@ export async function getGameStateForUser(userId: string) {
     },
     game: {
       score: gs.score,
-      currentNumber: Math.min(gs.currentIndex + 1, TOTAL_CHALLENGES),
-      total: TOTAL_CHALLENGES,
+      currentNumber: Math.min(gs.currentIndex + 1, total),
+      total,
       completedCount: completions.length,
       skippedCount,
       skipsUsed: gs.skipsUsed,
@@ -118,6 +116,8 @@ export async function getGameStateForUser(userId: string) {
       skipPenalty: SKIP_PENALTY,
       picturesCompleted: pictures,
       riddlesCompleted: riddles,
+      pictureTotal,
+      riddleTotal,
       isComplete: gs.isComplete,
       cooldownRemaining,
     },
@@ -140,7 +140,8 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
     result = await prisma.$transaction(async (tx) => {
       const gs = await tx.gameState.findUnique({ where: { userId } });
       if (!gs) throw new ApiError(404, "Game state not found.", "NO_GAME");
-      if (gs.isComplete || gs.currentIndex >= TOTAL_CHALLENGES) {
+      const total = gs.challengeIds.length;
+      if (gs.isComplete || gs.currentIndex >= total) {
         throw new ApiError(409, "The game is already complete.", "COMPLETE");
       }
 
@@ -150,22 +151,19 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
         throw new ApiError(429, `Please wait ${remaining}s before trying again.`, "COOLDOWN");
       }
 
-      const actualIndex = gs.challengeOrder[gs.currentIndex];
-      const challenge = await tx.challenge.findUnique({
-        where: { datasetId_index: { datasetId: gs.datasetId, index: actualIndex } },
-      });
+      const challengeId = gs.challengeIds[gs.currentIndex];
+      const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
       if (!challenge) throw new ApiError(500, "Challenge data missing.", "NO_CHALLENGE");
 
       const distance = round2(
         haversineMeters(input.latitude, input.longitude, challenge.latitude, challenge.longitude),
       );
 
-      // Reject untrustworthy GPS fixes (does not burn a cooldown).
       if (input.accuracy != null && input.accuracy > challenge.marginOfError * MAX_ACCURACY_MULTIPLIER) {
         await tx.submission.create({
           data: {
             gameStateId: gs.id,
-            challengeIndex: actualIndex,
+            challengeId,
             latitude: input.latitude,
             longitude: input.longitude,
             accuracy: input.accuracy,
@@ -184,7 +182,7 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
       await tx.submission.create({
         data: {
           gameStateId: gs.id,
-          challengeIndex: actualIndex,
+          challengeId,
           latitude: input.latitude,
           longitude: input.longitude,
           accuracy: input.accuracy ?? null,
@@ -195,10 +193,10 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
 
       if (success) {
         await tx.completion.create({
-          data: { gameStateId: gs.id, challengeIndex: actualIndex, pointsAwarded: challenge.points },
+          data: { gameStateId: gs.id, challengeId, pointsAwarded: challenge.points },
         });
         const nextIndex = gs.currentIndex + 1;
-        const isComplete = nextIndex >= TOTAL_CHALLENGES;
+        const isComplete = nextIndex >= total;
         await tx.gameState.update({
           where: { id: gs.id },
           data: {
@@ -234,7 +232,6 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
       };
     });
   } catch (e) {
-    // Concurrent duplicate completion of the same slot — safe to treat as benign.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       throw new ApiError(409, "That submission was already recorded.", "DUPLICATE");
     }
@@ -259,20 +256,19 @@ export async function skipChallenge(userId: string) {
     result = await prisma.$transaction(async (tx) => {
       const gs = await tx.gameState.findUnique({ where: { userId } });
       if (!gs) throw new ApiError(404, "Game state not found.", "NO_GAME");
-      if (gs.isComplete || gs.currentIndex >= TOTAL_CHALLENGES) {
+      const total = gs.challengeIds.length;
+      if (gs.isComplete || gs.currentIndex >= total) {
         throw new ApiError(409, "The game is already complete.", "COMPLETE");
       }
       if (gs.skipsUsed >= MAX_SKIPS) {
         throw new ApiError(403, `No skips remaining (max ${MAX_SKIPS}).`, "NO_SKIPS");
       }
 
-      const actualIndex = gs.challengeOrder[gs.currentIndex];
-      await tx.skip.create({
-        data: { gameStateId: gs.id, challengeIndex: actualIndex, penalty: SKIP_PENALTY },
-      });
+      const challengeId = gs.challengeIds[gs.currentIndex];
+      await tx.skip.create({ data: { gameStateId: gs.id, challengeId, penalty: SKIP_PENALTY } });
 
       const nextIndex = gs.currentIndex + 1;
-      const isComplete = nextIndex >= TOTAL_CHALLENGES;
+      const isComplete = nextIndex >= total;
       await tx.gameState.update({
         where: { id: gs.id },
         data: {

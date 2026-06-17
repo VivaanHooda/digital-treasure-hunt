@@ -15,11 +15,6 @@ enum Role {
   ADMIN
 }
 
-enum Dataset {
-  A
-  B
-}
-
 enum ChallengeType {
   PICTURE
   RIDDLE
@@ -71,15 +66,28 @@ model TeamMember {
   department String
 }
 
+// An admin-managed, named collection of challenges.
+model Dataset {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  challenges Challenge[]
+  gameStates GameState[]
+  selectedBy GameSettings[]
+}
+
 // Per-user game progress. Score/progress are written only by the server.
 model GameState {
   id              String    @id @default(cuid())
   userId          String    @unique
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // Dataset is frozen at game creation so an admin switch never corrupts a game in progress.
-  datasetId       Dataset
-  // Server-held per-user ordering of challenge indexes (the shuffle).
-  challengeOrder  Int[]
+  // Dataset is frozen at game creation so an admin switch never corrupts a game in
+  // progress. Restrict delete so a dataset a game has used can't be removed.
+  datasetId       String
+  dataset         Dataset   @relation(fields: [datasetId], references: [id], onDelete: Restrict)
+  // Frozen shuffled snapshot of the dataset's challenge ids (length = this game's total).
+  challengeIds    String[]
   currentIndex    Int       @default(0)
   score           Int       @default(0)
   skipsUsed       Int       @default(0)
@@ -98,49 +106,50 @@ model GameState {
 
 // A successfully solved challenge (true completions, separate from skips).
 model Completion {
-  id             String    @id @default(cuid())
-  gameStateId    String
-  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
-  challengeIndex Int
-  pointsAwarded  Int
-  completedAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  gameStateId   String
+  gameState     GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeId   String
+  pointsAwarded Int
+  completedAt   DateTime  @default(now())
 
-  @@unique([gameStateId, challengeIndex])
+  @@unique([gameStateId, challengeId])
 }
 
 // A skipped challenge (consumes the slot but is not a completion).
 model Skip {
-  id             String    @id @default(cuid())
-  gameStateId    String
-  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
-  challengeIndex Int
-  penalty        Int
-  skippedAt      DateTime  @default(now())
+  id          String    @id @default(cuid())
+  gameStateId String
+  gameState   GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeId String
+  penalty     Int
+  skippedAt   DateTime  @default(now())
 
-  @@unique([gameStateId, challengeIndex])
+  @@unique([gameStateId, challengeId])
 }
 
 // Audit trail of every verification attempt (anti-cheat / forensics).
 model Submission {
-  id             String    @id @default(cuid())
-  gameStateId    String
-  gameState      GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
-  challengeIndex Int
-  latitude       Float
-  longitude      Float
-  accuracy       Float?
-  distance       Float
-  success        Boolean
-  createdAt      DateTime  @default(now())
+  id          String    @id @default(cuid())
+  gameStateId String
+  gameState   GameState @relation(fields: [gameStateId], references: [id], onDelete: Cascade)
+  challengeId String
+  latitude    Float
+  longitude   Float
+  accuracy    Float?
+  distance    Float
+  success     Boolean
+  createdAt   DateTime  @default(now())
 
   @@index([gameStateId, createdAt])
 }
 
-// The challenge catalog. Coordinates live here and are NEVER sent to the client.
+// A challenge belonging to a dataset. Coordinates live here and are NEVER sent to the client.
 model Challenge {
   id            String        @id @default(cuid())
-  datasetId     Dataset
-  index         Int
+  datasetId     String
+  dataset       Dataset       @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  position      Int
   type          ChallengeType
   title         String
   description   String
@@ -150,7 +159,7 @@ model Challenge {
   marginOfError Int
   points        Int
 
-  @@unique([datasetId, index])
+  @@unique([datasetId, position])
 }
 
 // Single global settings row (id = "global").
@@ -162,7 +171,9 @@ model GameSettings {
   pausedAt        DateTime?
   totalPauseMs    Int      @default(0)
   isActive        Boolean  @default(true)
-  selectedDataset Dataset  @default(A)
+  // The dataset new registrations will use (null until the admin picks one).
+  selectedDatasetId String?
+  selectedDataset   Dataset? @relation(fields: [selectedDatasetId], references: [id], onDelete: SetNull)
   maxTeamSize     Int      @default(4)
   minTeamSize     Int      @default(3)
   updatedAt       DateTime @updatedAt

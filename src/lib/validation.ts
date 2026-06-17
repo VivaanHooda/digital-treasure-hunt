@@ -37,14 +37,60 @@ export const notificationSchema = z.object({
 
 export const pauseSchema = z.object({ paused: z.boolean() }).strict();
 
+export const startGameSchema = z
+  .object({
+    startTime: z.string().datetime(),
+    durationMs: z.number().int().positive().max(86_400_000),
+    selectedDatasetId: z.string().min(1),
+  })
+  .strict();
+
+export const stopGameSchema = z.object({ password: z.string().min(1) }).strict();
+
 export const settingsSchema = z
   .object({
     startTime: z.string().datetime().optional(),
     durationMs: z.number().int().positive().max(86_400_000).optional(),
-    selectedDataset: z.enum(["A", "B"]).optional(),
+    selectedDatasetId: z.string().min(1).nullable().optional(),
     isActive: z.boolean().optional(),
   })
   .strict();
+
+// ---- Datasets & challenges (admin) ----------------------------------------
+
+export const datasetSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
+// Image: a local /uploads/... path or an http(s) URL; empty becomes undefined.
+const imageUrlField = z.preprocess(
+  (v) => (v === "" || v == null ? undefined : v),
+  z
+    .string()
+    .trim()
+    .max(2000)
+    .regex(/^(\/uploads\/|https?:\/\/)/i, "Must be an uploaded path or http(s) URL")
+    .optional(),
+);
+
+const challengeBase = z.object({
+  type: z.enum(["PICTURE", "RIDDLE"]),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(2000),
+  imageUrl: imageUrlField,
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  marginOfError: z.number().int().positive().max(100_000),
+  points: z.number().int().positive().max(100_000),
+});
+
+export const challengeCreateSchema = challengeBase.refine(
+  (d) => d.type !== "PICTURE" || !!d.imageUrl,
+  { message: "Picture challenges require an image", path: ["imageUrl"] },
+);
+
+// Partial for edits; the final picture-needs-image invariant is checked in the service.
+export const challengeUpdateSchema = challengeBase.partial();
 
 /** Parse `data` against `schema`, throwing a 400 ApiError on failure. */
 export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {

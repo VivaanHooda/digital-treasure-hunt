@@ -16,13 +16,17 @@ export async function requireUser(): Promise<AuthedUser> {
     throw new ApiError(401, "Unauthorized", "UNAUTHENTICATED");
   }
 
-  const activeSid = await redis.get(sessionKey(session.user.id));
-  if (!activeSid || activeSid !== session.sid) {
-    throw new ApiError(
-      401,
-      "Session no longer active (signed in on another device).",
-      "SESSION_REVOKED",
-    );
+  // Admin (env-based) is allowed concurrent sessions; only regular users are
+  // pinned to a single device via the Redis session id.
+  if (session.user.role !== "ADMIN") {
+    const activeSid = await redis.get(sessionKey(session.user.id));
+    if (!activeSid || activeSid !== session.sid) {
+      throw new ApiError(
+        401,
+        "Session no longer active (signed in on another device).",
+        "SESSION_REVOKED",
+      );
+    }
   }
 
   return {

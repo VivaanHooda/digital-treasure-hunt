@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { handle, json, fail, getClientIp, assertSameOrigin, ApiError } from "@/lib/api";
 import { rateLimit, POLICIES } from "@/lib/rateLimit";
 import { parseOrThrow, registerSchema } from "@/lib/validation";
-import { generateChallengeOrder } from "@/lib/challengeOrder";
+import { shuffleChallengeIds } from "@/lib/challengeOrder";
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -16,12 +16,28 @@ export async function POST(req: Request) {
     });
     const input = parseOrThrow(registerSchema, body);
 
+    // The admin email is reserved (env-based admin account).
+    if (process.env.ADMIN_EMAIL && input.email === process.env.ADMIN_EMAIL.toLowerCase()) {
+      return fail(409, "An account with that email already exists.", "EMAIL_TAKEN");
+    }
+
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    // Freeze the dataset for this game from the current global selection.
+    // Freeze the dataset for this game from the current global selection, and
+    // snapshot a shuffled copy of its challenge ids.
     const settings = await prisma.gameSettings.findUnique({ where: { id: "global" } });
-    const datasetId = settings?.selectedDataset ?? "A";
-    const challengeOrder = generateChallengeOrder();
+    if (!settings?.selectedDatasetId) {
+      return fail(409, "No challenge dataset has been selected by the admin yet.", "NO_DATASET");
+    }
+    const datasetId = settings.selectedDatasetId;
+    const challenges = await prisma.challenge.findMany({
+      where: { datasetId },
+      select: { id: true },
+    });
+    if (challenges.length === 0) {
+      return fail(409, "The selected challenge dataset has no challenges.", "EMPTY_DATASET");
+    }
+    const challengeIds = shuffleChallengeIds(challenges.map((c) => c.id));
 
     try {
       const user = await prisma.$transaction(async (tx) => {
@@ -48,7 +64,7 @@ export async function POST(req: Request) {
             gameState: {
               create: {
                 datasetId,
-                challengeOrder,
+                challengeIds,
               },
             },
           },

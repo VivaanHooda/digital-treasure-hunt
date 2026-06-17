@@ -27,6 +27,8 @@ export type GameStateResponse = {
     skipPenalty: number;
     picturesCompleted: number;
     riddlesCompleted: number;
+    pictureTotal: number;
+    riddleTotal: number;
     isComplete: boolean;
     cooldownRemaining: number;
   };
@@ -56,6 +58,7 @@ export type LeaderboardEntry = {
   teamName: string;
   score: number;
   completedCount: number;
+  total: number;
   isComplete: boolean;
   lastCompletedAt: string | null;
 };
@@ -67,6 +70,21 @@ export type UserNotification = {
   type: "info" | "warning" | "success" | "error";
   createdAt: string;
 };
+
+export type TeamData = {
+  teamName: string;
+  leaderName: string;
+  leaderMobile: string;
+  leaderDepartment: string;
+  members: { name: string; mobile: string; department: string }[];
+} | null;
+
+export function useTeam() {
+  return useQuery({
+    queryKey: ["team"],
+    queryFn: () => apiGet<{ team: TeamData }>("/api/team"),
+  });
+}
 
 export function useGameState() {
   return useQuery({

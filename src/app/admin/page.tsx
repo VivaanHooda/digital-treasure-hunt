@@ -4,20 +4,42 @@ import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Shield, Settings, Pause, Play, Bell, Send, Users, Download, Trash2, Database,
+  Shield, Settings, Pause, Play, Square, Clock, Bell, Send, Users, Download, Trash2, Database,
   AlertTriangle, Loader2, LogOut, CheckCircle, XCircle,
 } from "lucide-react";
 import { PageBackground } from "@/components/PageBackground";
 import { useEventStream } from "@/hooks/useEventStream";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
+import { DatasetsManager } from "@/components/admin/DatasetsManager";
 
 type AdminSettings = {
   startTime: string;
   durationMs: number;
   isPaused: boolean;
+  pausedAt: string | null;
+  totalPauseMs: number;
   isActive: boolean;
-  selectedDataset: "A" | "B";
+  selectedDatasetId: string | null;
+  selectedDatasetName: string | null;
 };
+
+type GameStatus = "IDLE" | "SCHEDULED" | "RUNNING" | "PAUSED" | "ENDED";
+
+function deriveStatus(s: AdminSettings, now = Date.now()): GameStatus {
+  if (!s.isActive) return "IDLE";
+  const start = new Date(s.startTime).getTime();
+  if (now < start) return "SCHEDULED";
+  const activePause = s.isPaused && s.pausedAt ? now - new Date(s.pausedAt).getTime() : 0;
+  const elapsed = now - start - (s.totalPauseMs + activePause);
+  if (elapsed >= s.durationMs) return "ENDED";
+  return s.isPaused ? "PAUSED" : "RUNNING";
+}
+
+const fmtMs = (ms: number) => {
+  const x = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(x / 3600)).padStart(2, "0")}:${String(Math.floor((x % 3600) / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
+};
+type DatasetOption = { id: string; name: string; challengeCount: number };
 type Stats = { totalTeams: number; completedTeams: number; averageScore: number; topScore: number };
 type AdminTeam = {
   id: string; teamName: string; leaderName: string; leaderEmail: string;
@@ -36,6 +58,12 @@ const toLocalInput = (iso: string) => {
 
 export default function AdminPage() {
   useEventStream(true);
+  // 1s tick so the live status/timer recompute (e.g. SCHEDULED → RUNNING → ENDED).
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
   const qc = useQueryClient();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const flash = (ok: boolean, text: string) => {
@@ -44,6 +72,7 @@ export default function AdminPage() {
   };
 
   const settings = useQuery({ queryKey: ["adminSettings"], queryFn: () => apiGet<AdminSettings>("/api/admin/settings") });
+  const datasets = useQuery({ queryKey: ["adminDatasets"], queryFn: () => apiGet<{ datasets: DatasetOption[] }>("/api/admin/datasets") });
   const stats = useQuery({ queryKey: ["adminStats"], queryFn: () => apiGet<Stats>("/api/admin/stats") });
   const teams = useQuery({ queryKey: ["adminTeams"], queryFn: () => apiGet<{ teams: AdminTeam[] }>("/api/admin/teams") });
   const notes = useQuery({ queryKey: ["adminNotes"], queryFn: () => apiGet<{ notifications: AdminNote[] }>("/api/admin/notifications") });
@@ -75,6 +104,16 @@ export default function AdminPage() {
     onSuccess: (r) => { invalidate(["adminTeams", "adminStats"]); flash(true, `Reset ${r.deleted} teams.`); setConfirmReset(false); },
     onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
   });
+  const startGame = useMutation({
+    mutationFn: (body: { startTime: string; durationMs: number; selectedDatasetId: string }) => apiSend("/api/admin/game/start", "POST", body),
+    onSuccess: () => { invalidate(["adminSettings", "adminDatasets"]); flash(true, "Game started."); },
+    onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
+  });
+  const stopGame = useMutation({
+    mutationFn: (password: string) => apiSend("/api/admin/game/stop", "POST", { password }),
+    onSuccess: () => { invalidate(["adminSettings", "adminDatasets", "adminTeams", "adminStats"]); flash(true, "Game stopped."); setShowStop(false); setStopPassword(""); },
+    onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
+  });
 
   const [noteForm, setNoteForm] = useState({ title: "", message: "", type: "info" });
   const [startTime, setStartTime] = useState("");
@@ -82,6 +121,8 @@ export default function AdminPage() {
   const [minutes, setMinutes] = useState(0);
   const [confirmReset, setConfirmReset] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
+  const [showStop, setShowStop] = useState(false);
+  const [stopPassword, setStopPassword] = useState("");
 
   // Seed local form state once settings load.
   const s = settings.data;
@@ -131,51 +172,38 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Settings */}
+          {/* Game Control */}
           <div className={card}>
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Settings className="h-5 w-5 text-cyan-400" /> Game Settings</h2>
-            <label className="mb-1 block text-sm text-gray-300">Start time</label>
-            <input type="datetime-local" className={input} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm text-gray-300">Hours</label>
-                <input type="number" min={0} max={23} className={input} value={hours} onChange={(e) => setHours(+e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-gray-300">Minutes</label>
-                <input type="number" min={0} max={59} className={input} value={minutes} onChange={(e) => setMinutes(+e.target.value)} />
-              </div>
-            </div>
-            <div className="mt-3">
-              <label className="mb-1 block text-sm text-gray-300">Challenge dataset (affects new games only)</label>
-              <select
-                className={input}
-                value={s?.selectedDataset ?? "A"}
-                onChange={(e) => saveSettings.mutate({ selectedDataset: e.target.value })}
-              >
-                <option value="A">Set A</option>
-                <option value="B">Set B</option>
-              </select>
-            </div>
-            <button
-              onClick={() => saveSettings.mutate({ startTime: new Date(startTime).toISOString(), durationMs: (hours * 3600 + minutes * 60) * 1000 })}
-              disabled={saveSettings.isPending}
-              className="mt-4 w-full rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              Save Settings
-            </button>
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Settings className="h-5 w-5 text-cyan-400" /> Game Control</h2>
+            {!s ? (
+              <p className="text-gray-400">Loading…</p>
+            ) : (
+              <GameControl
+                s={s}
+                datasets={datasets.data?.datasets ?? []}
+                startTime={startTime}
+                setStartTime={setStartTime}
+                hours={hours}
+                setHours={setHours}
+                minutes={minutes}
+                setMinutes={setMinutes}
+                input={input}
+                onSelectDataset={(id) => saveSettings.mutate({ selectedDatasetId: id })}
+                onStart={() => {
+                  if (!s.selectedDatasetId) { flash(false, "Select a dataset first."); return; }
+                  startGame.mutate({ startTime: new Date(startTime).toISOString(), durationMs: (hours * 3600 + minutes * 60) * 1000, selectedDatasetId: s.selectedDatasetId });
+                }}
+                onPauseToggle={() => pause.mutate(!s.isPaused)}
+                onStop={() => setShowStop(true)}
+                starting={startGame.isPending}
+                pausing={pause.isPending}
+              />
+            )}
           </div>
 
           {/* Actions */}
           <div className={card}>
             <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Database className="h-5 w-5 text-purple-400" /> Game Actions</h2>
-            <button
-              onClick={() => pause.mutate(!s?.isPaused)}
-              disabled={pause.isPending || !s}
-              className={`mb-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white disabled:opacity-50 ${s?.isPaused ? "bg-green-600 hover:bg-green-700" : "bg-orange-600 hover:bg-orange-700"}`}
-            >
-              {s?.isPaused ? <><Play className="h-5 w-5" /> Resume Game</> : <><Pause className="h-5 w-5" /> Pause Game</>}
-            </button>
             <a
               href="/api/admin/export"
               className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 font-semibold text-white hover:bg-teal-700"
@@ -194,6 +222,7 @@ export default function AdminPage() {
             >
               <Trash2 className="h-5 w-5" /> Reset All Teams
             </button>
+            <p className="mt-3 text-xs text-gray-500">Reset wipes all team accounts &amp; progress. Stopping a game (in Game Control) ends it but keeps teams.</p>
           </div>
         </div>
 
@@ -221,6 +250,9 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Challenge Datasets */}
+        <DatasetsManager />
 
         {/* Notifications */}
         <div className={card}>
@@ -274,6 +306,133 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Stop game confirmation (password-gated) */}
+      {showStop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/50 bg-gray-800 p-6 text-center">
+            <Square className="mx-auto mb-3 h-10 w-10 text-red-400" />
+            <h3 className="mb-2 text-lg font-bold text-white">Stop &amp; discard game?</h3>
+            <p className="mb-4 text-sm text-gray-300">This ends the running game for everyone and unlocks the dataset. Re-enter the admin password to confirm.</p>
+            <input
+              type="password"
+              value={stopPassword}
+              onChange={(e) => setStopPassword(e.target.value)}
+              placeholder="Admin password"
+              className="mb-4 w-full rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2.5 text-white focus:border-red-400 focus:outline-none"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowStop(false); setStopPassword(""); }} className="flex-1 rounded-xl bg-gray-600 py-3 font-semibold text-white hover:bg-gray-700">Cancel</button>
+              <button onClick={() => stopGame.mutate(stopPassword)} disabled={stopGame.isPending || !stopPassword} className="flex-1 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                {stopGame.isPending ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Stop Game"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const statusStyles: Record<GameStatus, string> = {
+  IDLE: "text-gray-300",
+  SCHEDULED: "text-blue-300",
+  RUNNING: "text-green-300",
+  PAUSED: "text-orange-300",
+  ENDED: "text-red-300",
+};
+
+function GameControl({
+  s, datasets, startTime, setStartTime, hours, setHours, minutes, setMinutes, input,
+  onSelectDataset, onStart, onPauseToggle, onStop, starting, pausing,
+}: {
+  s: AdminSettings;
+  datasets: DatasetOption[];
+  startTime: string; setStartTime: (v: string) => void;
+  hours: number; setHours: (v: number) => void;
+  minutes: number; setMinutes: (v: number) => void;
+  input: string;
+  onSelectDataset: (id: string | null) => void;
+  onStart: () => void; onPauseToggle: () => void; onStop: () => void;
+  starting: boolean; pausing: boolean;
+}) {
+  const now = Date.now();
+  const status = deriveStatus(s, now);
+  const armed = s.isActive;
+
+  let timer: React.ReactNode = <span className="text-sm text-gray-400">No game scheduled</span>;
+  if (status === "SCHEDULED") timer = <Timer label="Starts in" value={fmtMs(new Date(s.startTime).getTime() - now)} />;
+  else if (status === "RUNNING" || status === "PAUSED") {
+    const activePause = s.isPaused && s.pausedAt ? now - new Date(s.pausedAt).getTime() : 0;
+    const left = s.durationMs - (now - new Date(s.startTime).getTime() - (s.totalPauseMs + activePause));
+    timer = <Timer label={s.isPaused ? "Paused — time left" : "Ends in"} value={fmtMs(left)} />;
+  } else if (status === "ENDED") timer = <span className="text-lg font-bold text-red-300">Ended</span>;
+
+  return (
+    <>
+      <div className="mb-4 flex items-center justify-between rounded-xl border border-gray-700/50 bg-gray-900/40 p-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-gray-400">Status</p>
+          <p className={`text-lg font-bold ${statusStyles[status]}`}>{status}</p>
+        </div>
+        {timer}
+      </div>
+
+      {!armed ? (
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Start time</label>
+            <input type="datetime-local" className={input} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Duration — hours</label>
+              <input type="number" min={0} max={23} className={input} value={hours} onChange={(e) => setHours(+e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Duration — minutes</label>
+              <input type="number" min={0} max={59} className={input} value={minutes} onChange={(e) => setMinutes(+e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Challenge dataset</label>
+            <select className={input} value={s.selectedDatasetId ?? ""} onChange={(e) => onSelectDataset(e.target.value || null)}>
+              <option value="">— Select a dataset —</option>
+              {datasets.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.challengeCount})</option>)}
+            </select>
+          </div>
+          <button onClick={onStart} disabled={starting} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+            <Play className="h-5 w-5" /> Start Game
+          </button>
+          <p className="text-xs text-gray-500">Use a start time of now (or earlier) to begin immediately, or a future time to schedule. Settings lock once the game starts.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div><dt className="text-gray-400">Dataset</dt><dd className="font-medium text-white">{s.selectedDatasetName ?? "—"}</dd></div>
+            <div><dt className="text-gray-400">Duration</dt><dd className="font-medium text-white">{Math.floor(s.durationMs / 3600000)}h {Math.round((s.durationMs % 3600000) / 60000)}m</dd></div>
+            <div className="col-span-2"><dt className="text-gray-400">Start</dt><dd className="font-medium text-white">{new Date(s.startTime).toLocaleString()}</dd></div>
+          </dl>
+          {(status === "RUNNING" || status === "PAUSED") && (
+            <button onClick={onPauseToggle} disabled={pausing} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white disabled:opacity-50 ${s.isPaused ? "bg-green-600 hover:bg-green-700" : "bg-orange-600 hover:bg-orange-700"}`}>
+              {s.isPaused ? <><Play className="h-5 w-5" /> Resume</> : <><Pause className="h-5 w-5" /> Pause</>}
+            </button>
+          )}
+          <button onClick={onStop} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700">
+            <Square className="h-5 w-5" /> Stop &amp; Discard Game
+          </button>
+          <p className="text-xs text-gray-500">Settings are locked while a game is armed. Stop the game to reconfigure or pick a different dataset.</p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Timer({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-right">
+      <p className="flex items-center justify-end gap-1 text-xs uppercase tracking-wide text-gray-400"><Clock className="h-3 w-3" /> {label}</p>
+      <p className="font-mono text-lg font-bold text-white">{value}</p>
     </div>
   );
 }

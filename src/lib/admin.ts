@@ -1,12 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { events } from "@/lib/events";
 import { ApiError } from "@/lib/api";
-import type { Dataset } from "@prisma/client";
+import { ADMIN_ID } from "@/lib/config";
 
 // ---- Settings -------------------------------------------------------------
 
 export async function getSettingsAdmin() {
-  const s = await prisma.gameSettings.findUnique({ where: { id: "global" } });
+  const s = await prisma.gameSettings.findUnique({
+    where: { id: "global" },
+    include: { selectedDataset: { select: { name: true } } },
+  });
   if (!s) throw new ApiError(500, "Game settings missing", "NO_SETTINGS");
   return {
     startTime: s.startTime.toISOString(),
@@ -15,7 +18,8 @@ export async function getSettingsAdmin() {
     pausedAt: s.pausedAt?.toISOString() ?? null,
     totalPauseMs: s.totalPauseMs,
     isActive: s.isActive,
-    selectedDataset: s.selectedDataset,
+    selectedDatasetId: s.selectedDatasetId,
+    selectedDatasetName: s.selectedDataset?.name ?? null,
     updatedAt: s.updatedAt.toISOString(),
   };
 }
@@ -23,17 +27,82 @@ export async function getSettingsAdmin() {
 export async function updateSettings(input: {
   startTime?: string;
   durationMs?: number;
-  selectedDataset?: "A" | "B";
+  selectedDatasetId?: string | null;
   isActive?: boolean;
 }) {
   const data: Record<string, unknown> = {};
   if (input.startTime !== undefined) data.startTime = new Date(input.startTime);
   if (input.durationMs !== undefined) data.durationMs = input.durationMs;
-  if (input.selectedDataset !== undefined) data.selectedDataset = input.selectedDataset as Dataset;
   if (input.isActive !== undefined) data.isActive = input.isActive;
+
+  // Settings are frozen once a game is armed; stop the game to change them.
+  const current = await prisma.gameSettings.findUnique({ where: { id: "global" } });
+  if (!current) throw new ApiError(500, "Game settings missing", "NO_SETTINGS");
+  if (current.isActive) {
+    throw new ApiError(409, "Stop the current game before changing settings.", "GAME_ACTIVE");
+  }
+
+  if (input.selectedDatasetId !== undefined && input.selectedDatasetId !== null) {
+    const count = await prisma.challenge.count({ where: { datasetId: input.selectedDatasetId } });
+    if (count === 0) throw new ApiError(400, "That dataset has no challenges.", "EMPTY_DATASET");
+    data.selectedDatasetId = input.selectedDatasetId;
+  } else if (input.selectedDatasetId === null) {
+    data.selectedDatasetId = null;
+  }
 
   await prisma.gameSettings.update({ where: { id: "global" }, data });
   await events.settings();
+  return getSettingsAdmin();
+}
+
+// ---- Game lifecycle (start / stop) ----------------------------------------
+
+/** Arm a game with the given config. Starts immediately if startTime <= now,
+ *  otherwise schedules it. Settings become locked until the game is stopped. */
+export async function startGame(input: {
+  startTime: string;
+  durationMs: number;
+  selectedDatasetId: string;
+}) {
+  const current = await prisma.gameSettings.findUnique({ where: { id: "global" } });
+  if (current?.isActive) {
+    throw new ApiError(409, "A game is already running. Stop it first.", "ALREADY_RUNNING");
+  }
+  const count = await prisma.challenge.count({ where: { datasetId: input.selectedDatasetId } });
+  if (count === 0) throw new ApiError(400, "That dataset has no challenges.", "EMPTY_DATASET");
+
+  await prisma.gameSettings.update({
+    where: { id: "global" },
+    data: {
+      isActive: true,
+      startTime: new Date(input.startTime),
+      durationMs: input.durationMs,
+      selectedDatasetId: input.selectedDatasetId,
+      isPaused: false,
+      pausedAt: null,
+      totalPauseMs: 0,
+    },
+  });
+  await events.settings();
+  await events.leaderboard();
+  return getSettingsAdmin();
+}
+
+/** Stop and discard the current game (password-gated). Ends every in-progress
+ *  game, disarms, and deselects the dataset so settings can be reconfigured. */
+export async function stopGame(password: string) {
+  if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+    throw new ApiError(403, "Incorrect admin password.", "BAD_PASSWORD");
+  }
+  await prisma.$transaction([
+    prisma.gameState.updateMany({ where: { isComplete: false }, data: { isComplete: true } }),
+    prisma.gameSettings.update({
+      where: { id: "global" },
+      data: { isActive: false, selectedDatasetId: null, isPaused: false, pausedAt: null, totalPauseMs: 0 },
+    }),
+  ]);
+  await events.settings();
+  await events.leaderboard();
   return getSettingsAdmin();
 }
 
@@ -71,7 +140,8 @@ export async function sendNotification(
       title: input.title?.trim() || "Admin Notification",
       message: input.message,
       type: input.type,
-      createdById: adminId,
+      // The env-admin has no User row; store null author for it.
+      createdById: adminId === ADMIN_ID ? null : adminId,
     },
   });
   await events.notifications();
@@ -153,25 +223,20 @@ const csvField = (v: unknown) => {
 };
 
 export async function buildAttendanceCsv(): Promise<string> {
-  const teams = await getTeamsAdmin();
-  const headers = [
-    "Team Name", "Leader Name", "Leader Email", "Leader Phone", "Leader Department",
-    "Member 1 Name", "Member 1 Phone", "Member 1 Dept",
-    "Member 2 Name", "Member 2 Phone", "Member 2 Dept",
-    "Member 3 Name", "Member 3 Phone", "Member 3 Dept",
-    "Score", "Registered At",
-  ];
-  const rows = teams.map((t) => {
-    const m = t.members;
-    return [
-      t.teamName, t.leaderName, t.leaderEmail, t.leaderMobile, t.leaderDepartment,
-      m[0]?.name, m[0]?.mobile, m[0]?.department,
-      m[1]?.name, m[1]?.mobile, m[1]?.department,
-      m[2]?.name, m[2]?.mobile, m[2]?.department,
-      t.score, t.createdAt,
-    ].map(csvField).join(",");
-  });
-  return [headers.map(csvField).join(","), ...rows].join("\n");
+  // One row per person. Highest-scoring teams first (doubles as a leaderboard);
+  // teams with 0 points are included. Leader row carries the email; members "Nil".
+  const teams = [...(await getTeamsAdmin())].sort((a, b) => b.score - a.score);
+
+  const headers = ["Name", "Team Name", "Mobile", "Department", "Email", "Team Score"];
+  const lines = [headers.map(csvField).join(",")];
+
+  for (const t of teams) {
+    lines.push([t.leaderName, t.teamName, t.leaderMobile, t.leaderDepartment, t.leaderEmail, t.score].map(csvField).join(","));
+    for (const m of t.members) {
+      lines.push([m.name, t.teamName, m.mobile, m.department, "Nil", t.score].map(csvField).join(","));
+    }
+  }
+  return lines.join("\n");
 }
 
 /** Delete all non-admin users (cascades to team, members, game state). */

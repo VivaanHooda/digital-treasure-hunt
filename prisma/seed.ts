@@ -1,11 +1,9 @@
-import { PrismaClient, Dataset, ChallengeType } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { PrismaClient, ChallengeType } from "@prisma/client";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const prisma = new PrismaClient();
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 type RawChallenge = {
@@ -21,19 +19,18 @@ type RawChallenge = {
   points: number;
 };
 
-async function main() {
-  // 1. Challenges (idempotent upsert by [datasetId, index]).
-  const raw = JSON.parse(
-    readFileSync(join(__dirname, "challenges.json"), "utf-8"),
-  ) as { A: RawChallenge[]; B: RawChallenge[] };
-
-  const all = [...raw.A, ...raw.B];
-  for (const c of all) {
+async function seedDataset(name: string, rows: RawChallenge[]) {
+  const dataset = await prisma.dataset.upsert({
+    where: { name },
+    create: { name },
+    update: {},
+  });
+  for (const c of rows) {
     await prisma.challenge.upsert({
-      where: { datasetId_index: { datasetId: c.datasetId as Dataset, index: c.index } },
+      where: { datasetId_position: { datasetId: dataset.id, position: c.index } },
       create: {
-        datasetId: c.datasetId as Dataset,
-        index: c.index,
+        datasetId: dataset.id,
+        position: c.index,
         type: c.type as ChallengeType,
         title: c.title,
         description: c.description,
@@ -55,9 +52,20 @@ async function main() {
       },
     });
   }
-  console.log(`Seeded ${all.length} challenges (A=${raw.A.length}, B=${raw.B.length}).`);
+  return dataset;
+}
 
-  // 2. Global game settings singleton.
+async function main() {
+  // 1. Challenge datasets (migrated from the original A/B JSON into named datasets).
+  const raw = JSON.parse(readFileSync(join(__dirname, "challenges.json"), "utf-8")) as {
+    A: RawChallenge[];
+    B: RawChallenge[];
+  };
+  const setA = await seedDataset("Set A", raw.A);
+  const setB = await seedDataset("Set B", raw.B);
+  console.log(`Seeded datasets: Set A (${raw.A.length}), Set B (${raw.B.length}).`);
+
+  // 2. Global game settings singleton (default selection = Set A).
   const durationMs = Number(process.env.GAME_DEFAULT_DURATION_MS ?? 7200000);
   await prisma.gameSettings.upsert({
     where: { id: "global" },
@@ -65,27 +73,16 @@ async function main() {
       id: "global",
       startTime: new Date(),
       durationMs,
-      isActive: true,
-      selectedDataset: Dataset.A,
+      isActive: false, // IDLE — admin starts a game explicitly
+      selectedDatasetId: setA.id, // default candidate dataset
     },
     update: {},
   });
   console.log("Ensured global game settings.");
+  void setB;
 
-  // 3. Admin account (from env; password hashed, never shipped to client).
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminEmail || !adminPassword) {
-    console.warn("ADMIN_EMAIL/ADMIN_PASSWORD not set — skipping admin creation.");
-  } else {
-    const passwordHash = await bcrypt.hash(adminPassword, 12);
-    await prisma.user.upsert({
-      where: { email: adminEmail.toLowerCase() },
-      create: { email: adminEmail.toLowerCase(), passwordHash, role: "ADMIN" },
-      update: { passwordHash, role: "ADMIN" },
-    });
-    console.log(`Ensured admin user: ${adminEmail.toLowerCase()}`);
-  }
+  // Admin is NOT stored in the DB — it authenticates from ADMIN_EMAIL /
+  // ADMIN_PASSWORD env vars at runtime (see src/auth.ts).
 }
 
 main()
