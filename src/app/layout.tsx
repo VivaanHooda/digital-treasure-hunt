@@ -1,41 +1,51 @@
 import type { Metadata, Viewport } from "next";
+import { GeistSans } from "geist/font/sans";
+import { Instrument_Serif, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import AnimatedBackground from "@/components/AnimatedBackground";
+import ArchiveBackground from "@/components/ui/ArchiveBackground";
+import { Dock } from "@/components/ui/Dock";
+import { DynamicIslandProvider } from "@/components/ui/DynamicIsland";
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-ibm-plex-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Digital Treasure Hunt",
-  description: "RVCE digital treasure hunt — find locations, solve riddles, climb the leaderboard.",
+  description: "An intelligence operation disguised as a game.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0d1117",
+  maximumScale: 1,
+  themeColor: "#0a0a0b",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${instrumentSerif.variable} ${ibmPlexMono.variable}`}
+    >
       <body>
         <Providers>
-          <div className="relative min-h-screen overflow-hidden">
-            <AnimatedBackground />
-            <div className="relative z-10 min-h-screen">{children}</div>
-
-            {/* Ambient light effects */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-              <div className="absolute top-0 left-1/4 w-48 h-48 sm:w-72 sm:h-72 lg:w-96 lg:h-96 bg-cyan-500/5 rounded-full blur-3xl animate-pulse" />
-              <div
-                className="absolute bottom-0 right-1/4 w-48 h-48 sm:w-72 sm:h-72 lg:w-96 lg:h-96 bg-purple-500/5 rounded-full blur-3xl animate-pulse"
-                style={{ animationDelay: "1s" }}
-              />
-              <div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 sm:w-72 sm:h-72 lg:w-96 lg:h-96 bg-blue-500/3 rounded-full blur-3xl animate-pulse"
-                style={{ animationDelay: "2s" }}
-              />
-            </div>
-          </div>
+          <DynamicIslandProvider>
+            <ArchiveBackground />
+            <div className="relative z-10 min-h-dvh">{children}</div>
+            <Dock />
+          </DynamicIslandProvider>
         </Providers>
       </body>
     </html>

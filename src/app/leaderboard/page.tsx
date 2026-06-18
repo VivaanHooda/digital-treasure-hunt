@@ -1,168 +1,158 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { Trophy, Crown, Medal, Award, Users, ArrowLeft, RefreshCw, Clock } from "lucide-react";
-import { useLeaderboard, useTeam } from "@/hooks/useGame";
+import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { RefreshCw } from "lucide-react";
+import { useLeaderboard, useTeam, useMomentum } from "@/hooks/useGame";
 import { useEventStream } from "@/hooks/useEventStream";
+import { cn } from "@/lib/cn";
+import { spring, staggerContainer, revealVariants } from "@/lib/motion";
 
-const rankIcon = (rank: number) => {
-  if (rank === 1) return <Crown className="text-yellow-400 w-5 h-5 sm:w-6 sm:h-6" />;
-  if (rank === 2) return <Medal className="text-gray-400 w-5 h-5 sm:w-6 sm:h-6" />;
-  if (rank === 3) return <Award className="text-amber-600 w-5 h-5 sm:w-6 sm:h-6" />;
-  return <div className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center bg-gray-600 rounded-full text-white text-xs sm:text-sm font-bold">{rank}</div>;
-};
-const rankColor = (rank: number) => {
-  if (rank === 1) return "border-yellow-400 bg-yellow-400/10";
-  if (rank === 2) return "border-gray-400 bg-gray-400/10";
-  if (rank === 3) return "border-amber-600 bg-amber-600/10";
-  return "border-gray-600 bg-gray-700/20";
-};
+const pad2 = (n: number) => String(n).padStart(2, "0");
 const isLive = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 300000;
 
 export default function LeaderboardPage() {
   useEventStream(true);
-  const router = useRouter();
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
   const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useLeaderboard();
+  const { data: momentum } = useMomentum();
   const { data: teamResp } = useTeam();
   const myTeamName = teamResp?.team?.teamName;
 
   const entries = data?.entries ?? [];
-  const completedTeams = entries.filter((e) => e.isComplete).length;
-  const myRow = entries.find((e) => e.teamName === myTeamName);
+  const topScore = entries[0]?.score ?? 0;
+
+  const momentumByTeam = useMemo(() => {
+    const m = new Map<string, { recentGain: number }>();
+    momentum?.teams.forEach((t) => m.set(t.teamName, { recentGain: t.recentGain }));
+    return m;
+  }, [momentum]);
+
+  // Tick once a second so the "synced … ago" clock stays live between refetches.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const syncedAgo = dataUpdatedAt > 0 ? Math.max(0, Math.round((Date.now() - dataUpdatedAt) / 1000)) : null;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-b-2 border-blue-500 mx-auto mb-4" />
-          <p className="text-gray-300 text-sm sm:text-base">Loading leaderboard...</p>
+      <div className="flex min-h-dvh items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="h-6 w-6 animate-spin text-signal" />
+          <p className="label">Compiling Standings</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <nav className="bg-gray-800/50 backdrop-blur-md border-b border-gray-700 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
-          <div className="flex justify-between items-center h-14 sm:h-16">
-            <button onClick={() => router.push(isAdmin ? "/admin" : "/dashboard")} className="flex items-center text-gray-300 hover:text-white transition-colors text-sm sm:text-base">
-              <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
-              <span className="hidden xs:inline">{isAdmin ? "Admin Panel" : "Dashboard"}</span>
-              <span className="xs:hidden">Back</span>
-            </button>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-lg sm:text-xl font-bold text-white">Leaderboard</h1>
-              {isAdmin && <span className="px-2 py-1 bg-red-500 text-white text-xs rounded-full">Admin</span>}
+    <>
+      <motion.main variants={staggerContainer} initial="hidden" animate="show" className="mx-auto w-full max-w-3xl px-5 pb-36 pt-[max(2rem,var(--safe-top))]">
+        <motion.header variants={revealVariants} className="flex items-end justify-between gap-4 border-b border-line pb-6">
+          <div>
+            <div className="label mb-3 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 animate-breathe rounded-full bg-signal" /> Live · Field Units
             </div>
-            <button onClick={() => refetch()} disabled={isFetching} className="flex items-center px-2 sm:px-3 py-1 sm:py-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50 text-sm sm:text-base">
-              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-              <span className="ml-1 sm:ml-2 hidden xs:inline">Refresh</span>
+            <h1 className="font-serif text-5xl text-ink sm:text-6xl">Standings</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="data text-3xl tabular-nums text-signal">{pad2(entries.length)}</div>
+              <div className="label mt-1">Units</div>
+            </div>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              aria-label="Refresh standings"
+              className="rounded-lg p-2 text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink disabled:opacity-50"
+            >
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
             </button>
           </div>
-        </div>
-      </nav>
-
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="text-center mb-6 sm:mb-8">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2 sm:mb-4">Team Rankings</h2>
-          <p className="text-gray-300 text-sm sm:text-base lg:text-lg mb-2 flex items-center justify-center gap-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" /> Live leaderboard
-          </p>
-          {dataUpdatedAt > 0 && <p className="text-gray-400 text-xs sm:text-sm">Last updated: {new Date(dataUpdatedAt).toLocaleTimeString()}</p>}
-        </div>
+        </motion.header>
 
         {entries.length === 0 ? (
-          <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-8 sm:p-12 text-center border border-gray-700">
-            <Users className="text-gray-400 mx-auto mb-4 w-10 h-10 sm:w-12 sm:h-12" />
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">No Teams Yet</h3>
-            <p className="text-gray-400 text-sm sm:text-base">Be the first team to start the treasure hunt!</p>
-          </div>
+          <motion.div variants={revealVariants} className="py-24 text-center">
+            <p className="label">No Units Deployed</p>
+            <p className="mt-3 text-ink-2">Be the first to log a confirmed position.</p>
+          </motion.div>
         ) : (
-          <div className="space-y-3 sm:space-y-4">
+          <motion.ol layout className="mt-2">
             {entries.map((team) => {
               const isCurrent = !!myTeamName && team.teamName === myTeamName;
               const live = isLive(team.lastCompletedAt);
+              const mo = momentumByTeam.get(team.teamName);
+
               return (
-                <div key={team.rank} className={`bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 border transition-all ${isCurrent ? "border-blue-400 bg-blue-400/10 ring-2 ring-blue-400/20" : rankColor(team.rank)}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
-                      <div className="flex-shrink-0">{rankIcon(team.rank)}</div>
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-base sm:text-lg font-bold text-white truncate">{team.teamName}</h3>
-                          {isCurrent && <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full whitespace-nowrap">You</span>}
-                        </div>
-                      </div>
+                <motion.li
+                  layout
+                  layoutId={team.teamName}
+                  key={team.teamName}
+                  transition={spring}
+                  className={cn(
+                    "relative grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 py-5",
+                    isCurrent
+                      ? "-mx-3 my-1.5 rounded-2xl border border-signal/40 bg-signal-soft px-3"
+                      : "border-b border-line",
+                  )}
+                >
+                  {/* rank */}
+                  <div className="flex flex-col items-center">
+                    <span className={cn("data text-2xl tabular-nums", team.rank <= 3 || isCurrent ? "text-signal" : "text-ink-2")}>
+                      {pad2(team.rank)}
+                    </span>
+                    <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", team.isComplete ? "bg-ok" : live ? "animate-breathe bg-signal" : "bg-ink-3")} />
+                  </div>
+
+                  {/* identity */}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="truncate font-serif text-2xl text-ink">{team.teamName}</h3>
+                      {isCurrent && (
+                        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-signal">
+                          Your Unit
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center space-x-4 sm:space-x-8">
-                      <div className="text-center"><p className="text-xl sm:text-2xl font-bold text-yellow-400">{team.score}</p><p className="text-gray-400 text-xs">Points</p></div>
-                      <div className="text-center"><p className="text-base sm:text-lg font-semibold text-white">{team.completedCount}/{team.total}</p><p className="text-gray-400 text-xs">Completed</p></div>
-                      <div className="text-center">
-                        <div className={`w-3 h-3 rounded-full mx-auto ${team.isComplete ? "bg-green-400" : live ? "bg-blue-400" : "bg-gray-400"}`} />
-                        <p className="text-gray-400 text-xs mt-1">{team.isComplete ? "Done" : live ? "Active" : "Idle"}</p>
-                      </div>
+                    <div className="mt-1 flex items-center gap-3">
+                      <span className="data text-xs text-ink-3">{team.completedCount}/{team.total} solved</span>
+                      {mo && mo.recentGain > 0 && <span className="data text-xs text-signal">▲ +{mo.recentGain}</span>}
                     </div>
                   </div>
-                  <div className="mt-3 sm:mt-4">
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div className={`h-2 rounded-full transition-all duration-500 ${team.rank === 1 ? "bg-gradient-to-r from-yellow-400 to-yellow-600" : team.rank === 2 ? "bg-gradient-to-r from-gray-300 to-gray-500" : team.rank === 3 ? "bg-gradient-to-r from-amber-500 to-amber-700" : "bg-gradient-to-r from-blue-400 to-purple-500"}`} style={{ width: `${team.total ? (team.completedCount / team.total) * 100 : 0}%` }} />
-                    </div>
+
+                  {/* score */}
+                  <div className="text-right">
+                    <div className="data text-2xl tabular-nums text-ink">{team.score}</div>
+                    <div className="label mt-0.5">pts</div>
                   </div>
-                </div>
+                </motion.li>
               );
             })}
-          </div>
+          </motion.ol>
         )}
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6 mt-6 sm:mt-8">
-          <SummaryCard icon={<Users className="text-blue-400 mx-auto mb-2 sm:mb-3 w-6 h-6 sm:w-8 sm:h-8" />} title="Total Teams" value={entries.length} color="text-blue-400" />
-          <SummaryCard icon={<Trophy className="text-yellow-400 mx-auto mb-2 sm:mb-3 w-6 h-6 sm:w-8 sm:h-8" />} title="Top Score" value={entries[0]?.score ?? 0} color="text-yellow-400" />
-          <SummaryCard icon={<Award className="text-green-400 mx-auto mb-2 sm:mb-3 w-6 h-6 sm:w-8 sm:h-8" />} title="Completed Teams" value={completedTeams} color="text-green-400" className="col-span-2 sm:col-span-1" />
-        </div>
-
-        {/* Your position */}
-        {myTeamName && !isAdmin && (
-          <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur-md rounded-xl p-4 sm:p-6 border border-blue-500/30 mt-6 sm:mt-8">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
-              <div>
-                <h3 className="text-lg sm:text-xl font-bold text-white mb-1 sm:mb-2">Your Team Position</h3>
-                <p className="text-gray-300 text-sm sm:text-base">Team: {myTeamName}</p>
-              </div>
-              {myRow ? (
-                <div className="flex items-center justify-center sm:justify-end space-x-4 sm:space-x-6">
-                  <div className="text-center"><p className="text-lg sm:text-2xl font-bold text-white">#{myRow.rank}</p><p className="text-gray-400 text-xs sm:text-sm">Rank</p></div>
-                  <div className="text-center"><p className="text-lg sm:text-2xl font-bold text-yellow-400">{myRow.score}</p><p className="text-gray-400 text-xs sm:text-sm">Score</p></div>
-                  <div className="text-center"><p className="text-sm sm:text-lg font-semibold text-white">{myRow.completedCount}/{myRow.total}</p><p className="text-gray-400 text-xs sm:text-sm">Done</p></div>
-                </div>
-              ) : (
-                <div className="text-center sm:text-right">
-                  <p className="text-gray-400 text-base sm:text-lg">Not yet ranked</p>
-                  <p className="text-gray-500 text-sm flex items-center gap-1 justify-end"><Clock className="w-4 h-4" /> Complete a challenge to appear</p>
-                </div>
-              )}
+        {/* Operational summary */}
+        <motion.section variants={revealVariants} className="mt-12 grid grid-cols-3 gap-x-6 border-t border-line pt-6">
+          {[
+            ["Units", pad2(entries.length)],
+            ["Top Score", String(topScore)],
+            ["Completed", pad2(entries.filter((e) => e.isComplete).length)],
+          ].map(([label, value]) => (
+            <div key={label} className="border-l border-line pl-3">
+              <span className="label block">{label}</span>
+              <span className="data mt-1 block text-xl tabular-nums text-ink">{value}</span>
             </div>
-          </div>
+          ))}
+        </motion.section>
+
+        {syncedAgo !== null && (
+          <p className="label mt-8 flex items-center justify-center gap-2 !text-ink-3">
+            <span className="h-1.5 w-1.5 animate-breathe rounded-full bg-signal" />
+            Live · synced {syncedAgo === 0 ? "now" : `${syncedAgo}s ago`}
+          </p>
         )}
-
-        <div className="text-center mt-6 sm:mt-8 p-4">
-          <p className="text-gray-400 text-xs sm:text-sm">Rankings update live as teams make progress</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ icon, title, value, color, className = "" }: { icon: React.ReactNode; title: string; value: number; color: string; className?: string }) {
-  return (
-    <div className={`bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 border border-gray-700 text-center ${className}`}>
-      {icon}
-      <h3 className="text-sm sm:text-xl font-semibold text-white mb-1 sm:mb-2">{title}</h3>
-      <p className={`text-xl sm:text-3xl font-bold ${color}`}>{value}</p>
-    </div>
+      </motion.main>
+    </>
   );
 }

@@ -98,6 +98,29 @@ export function useLeaderboard() {
   return useQuery({
     queryKey: queryKeys.leaderboard,
     queryFn: () => apiGet<{ entries: LeaderboardEntry[] }>("/api/leaderboard"),
+    refetchInterval: 15_000, // safety net atop SSE; also keeps the sync clock live
+  });
+}
+
+export type TeamMomentum = {
+  teamName: string;
+  spark: number[];
+  recentGain: number;
+};
+
+export type MomentumResponse = {
+  teams: TeamMomentum[];
+  from: number;
+  to: number;
+  windowMs: number;
+};
+
+export function useMomentum() {
+  return useQuery({
+    // Shares the "leaderboard" key family so the existing SSE event invalidates it.
+    queryKey: [...queryKeys.leaderboard, "momentum"],
+    queryFn: () => apiGet<MomentumResponse>("/api/leaderboard/momentum"),
+    refetchInterval: 15_000,
   });
 }
 

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trophy, Clock, Target, Award, Play, Heart, SkipForward } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/Button";
+import { springHeavy, settle } from "@/lib/motion";
 
-const confettiColors = ["#00ffff", "#bf00ff", "#ff0080", "#39ff14", "#ffff00"];
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function GameOverPopup({
   score,
@@ -24,99 +26,48 @@ export function GameOverPopup({
   isComplete?: boolean;
   onClose: () => void;
 }) {
-  const [count, setCount] = useState(40);
-  useEffect(() => setCount(window.innerWidth < 768 ? 30 : 50), []);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm safe-area-inset px-3 sm:px-4 md:px-6">
-      <div className="absolute inset-0 pointer-events-none">
-        {Array.from({ length: count }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1.5 h-1.5 sm:w-2 sm:h-2 animate-bounce rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              backgroundColor: confettiColors[Math.floor(Math.random() * confettiColors.length)],
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${2 + Math.random() * 3}s`,
-            }}
-          />
-        ))}
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-paper/80 px-5 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={springHeavy}
+        className="relative w-full max-w-lg rounded-3xl border border-line-strong bg-paper-2 p-8 shadow-sheet sm:p-10"
+      >
+        <div className="label mb-6">{isComplete ? "Operation Debrief" : "Operation Terminated"}</div>
+        <h2 className="font-serif text-5xl leading-none text-ink sm:text-6xl">
+          {isComplete ? "Mission Complete" : "Time Expired"}
+        </h2>
 
-      <div className="relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 w-full max-w-sm sm:max-w-md md:max-w-lg border border-gray-700/50 shadow-2xl backdrop-blur-xl mx-3 sm:mx-4">
-        <div className="text-center mb-4 sm:mb-6 md:mb-8">
-          <div
-            className={`w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br ${
-              isComplete ? "from-green-500 to-emerald-600" : "from-red-500 to-orange-600"
-            } rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-lg animate-pulse`}
-          >
-            {isComplete ? (
-              <Trophy className="w-8 h-8 md:w-10 md:h-10 text-white" />
-            ) : (
-              <Clock className="w-8 h-8 md:w-10 md:h-10 text-white" />
-            )}
-          </div>
-          <h2
-            className={`text-2xl sm:text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r ${
-              isComplete ? "from-green-400 to-emerald-500" : "from-red-400 to-orange-500"
-            } mb-2 md:mb-4`}
-          >
-            {isComplete ? "Mission Complete!" : "Time's Up!"}
-          </h2>
-          <p className="text-base sm:text-lg md:text-xl text-gray-300">
-            Your treasure hunting mission has ended
-          </p>
+        <div className="mt-8 flex items-baseline gap-4 border-t border-line pt-8">
+          <span className="data text-7xl tabular-nums text-signal">{score}</span>
+          <span className="label pb-2">Final Score</span>
         </div>
 
-        <div className="space-y-4 md:space-y-6 mb-4 sm:mb-6 md:mb-8">
-          <div className="bg-gray-700/30 rounded-xl sm:rounded-2xl p-4 md:p-6 text-center">
-            <p className="text-3xl sm:text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-1 sm:mb-2">
-              {score}
-            </p>
-            <p className="text-gray-400 uppercase tracking-wide text-sm sm:text-base">Final Score</p>
-          </div>
-
-          <div className="grid grid-cols-4 gap-2 sm:gap-3">
-            <StatBox icon={<Target className="w-4 h-4 sm:w-5 sm:h-5 text-white" />} grad="from-blue-500 to-cyan-600" value={completedCount} label="Total" />
-            <StatBox icon={<Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-white" />} grad="from-green-500 to-emerald-600" value={picturesCompleted} label="Pictures" />
-            <StatBox icon={<Award className="w-4 h-4 sm:w-5 sm:h-5 text-white" />} grad="from-purple-500 to-pink-600" value={riddlesCompleted} label="Riddles" />
-            <StatBox icon={<SkipForward className="w-4 h-4 sm:w-5 sm:h-5 text-white" />} grad="from-orange-500 to-red-600" value={skipsUsed} label="Skips" />
-          </div>
-
-          {skipsUsed > 0 && (
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
-              <div className="flex items-center justify-center space-x-2 mb-1 sm:mb-2">
-                <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
-                <span className="text-orange-300 font-semibold text-sm sm:text-base">Skip Penalty Applied</span>
-              </div>
-              <p className="text-gray-400 text-xs sm:text-sm">
-                {skipsUsed} skip{skipsUsed > 1 ? "s" : ""} used • -{skipsUsed * skipPenalty} points deducted
-              </p>
+        <dl className="mt-6 grid grid-cols-4 gap-x-6 border-t border-line pt-6">
+          {[
+            ["Solved", completedCount],
+            ["Pictures", picturesCompleted],
+            ["Riddles", riddlesCompleted],
+            ["Skips", skipsUsed],
+          ].map(([label, value]) => (
+            <div key={label as string} className="flex flex-col gap-1.5">
+              <dt className="label">{label as string}</dt>
+              <dd className="data text-2xl tabular-nums text-ink">{value as number}</dd>
             </div>
-          )}
-        </div>
+          ))}
+        </dl>
 
-        <button
-          onClick={onClose}
-          className="w-full px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-blue-600 to-purple-700 hover:from-blue-700 hover:to-purple-800 text-white rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg ripple-effect"
-        >
-          View Leaderboard
-        </button>
-      </div>
-    </div>
-  );
-}
+        {skipsUsed > 0 && (
+          <p className="label mt-6 !text-alert">
+            Penalty · {skipsUsed} clearance{skipsUsed > 1 ? "s" : ""} used · −{skipsUsed * skipPenalty} pts
+          </p>
+        )}
 
-function StatBox({ icon, grad, value, label }: { icon: React.ReactNode; grad: string; value: number; label: string }) {
-  return (
-    <div className="bg-gray-700/30 rounded-lg sm:rounded-xl p-2 sm:p-3 md:p-4 text-center">
-      <div className={`w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br ${grad} rounded-lg flex items-center justify-center mx-auto mb-2 sm:mb-3`}>
-        {icon}
-      </div>
-      <p className="text-lg sm:text-xl md:text-2xl font-bold text-white">{value}</p>
-      <p className="text-gray-400 text-xs sm:text-sm">{label}</p>
+        <Button size="lg" className="mt-8 w-full" noMagnet onClick={onClose}>
+          View Standings
+        </Button>
+      </motion.div>
     </div>
   );
 }
@@ -138,32 +89,34 @@ export function CountdownToStart({ startTimeMs, onGameStart }: { startTimeMs: nu
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
-    if (d > 0) return `${d}d ${h}h ${m}m ${sec}s`;
-    if (h > 0) return `${h}h ${m}m ${sec}s`;
-    return `${m}m ${sec}s`;
+    if (d > 0) return `${d}:${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+    return `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
   };
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center safe-area-inset px-3 sm:px-4 md:px-6">
-      <div className="w-full max-w-sm sm:max-w-md md:max-w-lg bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 sm:p-8 md:p-10 border border-gray-700/50 text-center backdrop-blur-xl shadow-2xl">
-        <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 md:mb-8 shadow-lg animate-pulse">
-          <Play className="w-10 h-10 md:w-12 md:h-12 text-white" />
-        </div>
-        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-3 sm:mb-4">
-          Get Ready!
-        </h2>
-        <p className="text-base sm:text-lg md:text-xl text-gray-300 mb-6 md:mb-8">
-          The treasure hunt will begin in:
-        </p>
-        <div className="bg-gray-700/30 rounded-xl sm:rounded-2xl p-6 md:p-8 mb-6 md:mb-8">
-          <p className="text-4xl sm:text-5xl md:text-6xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 break-all">
-            {fmt(remaining)}
-          </p>
-        </div>
-        <p className="text-gray-400 text-sm sm:text-base">
-          Stay tuned! The mission will start automatically.
-        </p>
-      </div>
+    <div className="flex min-h-dvh items-center justify-center px-6">
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
+        className="w-full max-w-xl text-center"
+      >
+        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: settle } }} className="label mb-6">
+          Clearance Pending
+        </motion.div>
+        <motion.h2 variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: settle } }} className="font-serif text-5xl text-ink sm:text-7xl">
+          Standby for Briefing
+        </motion.h2>
+        <motion.p
+          variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: settle } }}
+          className="data mt-10 text-6xl tabular-nums text-signal sm:text-7xl"
+        >
+          {fmt(remaining)}
+        </motion.p>
+        <motion.p variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: settle } }} className="label mt-8">
+          The operation begins automatically
+        </motion.p>
+      </motion.div>
     </div>
   );
 }
