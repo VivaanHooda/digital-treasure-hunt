@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn, getSession } from "next-auth/react";
 import { motion } from "framer-motion";
+import { Loader2, MonitorSmartphone } from "lucide-react";
+import { apiSend, ClientError } from "@/lib/client";
 import { Input } from "@/components/ui/Input";
 import { SweepButton } from "@/components/ui/SweepButton";
+import { Button } from "@/components/ui/Button";
+import { Sheet } from "@/components/ui/Sheet";
 import { Panel } from "@/components/ui/Panel";
 import { staggerContainer, revealVariants } from "@/lib/motion";
 
@@ -16,6 +20,13 @@ export default function LoginPage() {
   const [formErrors, setFormErrors] = useState<{ email?: string; password?: string }>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showTakeover, setShowTakeover] = useState(false);
+  const [kicked, setKicked] = useState(false);
+
+  // Surfaced when this device was signed out because the account opened elsewhere.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("kicked") === "1") setKicked(true);
+  }, []);
 
   const validate = () => {
     const errors: { email?: string; password?: string } = {};
@@ -26,10 +37,8 @@ export default function LoginPage() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!validate()) return;
+  // Performs the actual sign-in (taking over any other device).
+  const doSignIn = async () => {
     setLoading(true);
     const res = await signIn("credentials", { redirect: false, email: formData.email, password: formData.password });
     if (!res || res.error) {
@@ -42,6 +51,41 @@ export default function LoginPage() {
     router.refresh();
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setKicked(false);
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      // Probe first: if the account is already active elsewhere, warn before taking over.
+      const chk = await apiSend<{ valid: boolean; hasActiveSession: boolean }>(
+        "/api/auth/session-check",
+        "POST",
+        { email: formData.email, password: formData.password },
+      );
+      if (!chk.valid) {
+        setError("Credentials rejected. Access denied.");
+        setLoading(false);
+        return;
+      }
+      if (chk.hasActiveSession) {
+        setLoading(false);
+        setShowTakeover(true);
+        return;
+      }
+      await doSignIn();
+    } catch (err) {
+      setError(err instanceof ClientError ? err.message : "Something went wrong. Try again.");
+      setLoading(false);
+    }
+  };
+
+  const confirmTakeover = async () => {
+    setShowTakeover(false);
+    await doSignIn();
+  };
+
   return (
     <div className="flex min-h-dvh items-center justify-center px-5 py-12">
       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="w-full max-w-md">
@@ -49,13 +93,36 @@ export default function LoginPage() {
           <span className="h-1.5 w-1.5 animate-breathe rounded-full bg-signal" /> Restricted · Clearance Required
         </motion.div>
         <motion.h1 variants={revealVariants} className="font-serif text-6xl leading-[0.95] text-ink sm:text-7xl">
-          The Archive
+          Treasure Hunt
         </motion.h1>
         <motion.p variants={revealVariants} className="mt-5 text-ink-2">
           An intelligence operation. Identify yourself to proceed.
         </motion.p>
 
-        <motion.form variants={revealVariants} onSubmit={handleSubmit} className="mt-10 space-y-7">
+        {/* Kicked notice */}
+        {kicked && (
+          <motion.div variants={revealVariants} className="mt-6 flex items-start gap-3 border-l-2 border-signal pl-4">
+            <MonitorSmartphone className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
+            <p className="text-sm text-ink-2">
+              You were signed out — this account was opened on another device. Sign in again to resume here.
+            </p>
+          </motion.div>
+        )}
+
+        {/* Access / Enlist — registration gets equal billing in one compact row */}
+        <motion.div variants={revealVariants} className="mt-8 grid grid-cols-2 gap-1 rounded-xl border border-line p-1">
+          <span className="rounded-lg bg-signal py-2.5 text-center font-mono text-[0.7rem] uppercase tracking-[0.18em] text-paper">
+            Access
+          </span>
+          <Link
+            href="/register"
+            className="rounded-lg py-2.5 text-center font-mono text-[0.7rem] uppercase tracking-[0.18em] text-ink-3 transition-colors hover:bg-paper-1 hover:text-ink"
+          >
+            Enlist
+          </Link>
+        </motion.div>
+
+        <motion.form variants={revealVariants} onSubmit={handleSubmit} className="mt-6 space-y-7">
           {error && (
             <div className="flex items-center gap-3 border-l-2 border-alert pl-4">
               <span className="h-1.5 w-1.5 rounded-full bg-alert" />
@@ -82,11 +149,6 @@ export default function LoginPage() {
           <SweepButton type="submit" loading={loading}>
             {loading ? "Authenticating" : "Request Clearance"}
           </SweepButton>
-
-          <p className="label text-center !text-ink-3">
-            No credentials?{" "}
-            <Link href="/register" className="!text-signal transition-opacity hover:opacity-80">Register a field unit</Link>
-          </p>
         </motion.form>
 
         <motion.div variants={revealVariants} className="mt-10">
@@ -116,6 +178,28 @@ export default function LoginPage() {
           <img src="/images/logos/CCWhite.png" alt="CC Logo" className="h-16 w-auto" />
         </motion.div>
       </motion.div>
+
+      {/* Single-device takeover */}
+      <Sheet open={showTakeover} onClose={() => setShowTakeover(false)} draggable={false}>
+        <div className="pb-2">
+          <div className="label mb-3 flex items-center gap-2 !text-signal">
+            <MonitorSmartphone className="h-3.5 w-3.5" /> Single-Device Policy
+          </div>
+          <h2 className="font-serif text-3xl text-ink">Active on another device</h2>
+          <p className="mt-4 text-ink-2">
+            This account is already signed in elsewhere. Only one device may be active at a time —
+            continuing will sign that device out and take over here.
+          </p>
+          <div className="mt-8 flex flex-col gap-3">
+            <Button size="lg" className="w-full" noMagnet disabled={loading} onClick={confirmTakeover}>
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Log out other device & continue"}
+            </Button>
+            <Button variant="ghost" size="lg" className="w-full" noMagnet onClick={() => setShowTakeover(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Sheet>
     </div>
   );
 }

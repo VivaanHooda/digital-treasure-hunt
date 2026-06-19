@@ -28,6 +28,8 @@ export async function GET(req: Request) {
     CHANNELS.notifications,
     CHANNELS.userGameState(user.id),
   ];
+  // Listen for a real-time revoke of THIS device's session (single-device takeover).
+  if (user.sid) channels.push(CHANNELS.session(user.sid));
 
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -67,6 +69,8 @@ export async function GET(req: Request) {
           payload = {};
         }
         send(payload.type ?? "update", payload);
+        // This session was taken over elsewhere — push the event, then close.
+        if (payload.type === "sessionRevoked") void cleanup();
       });
 
       await sub.subscribe(...channels);

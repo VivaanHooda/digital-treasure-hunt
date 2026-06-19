@@ -3,7 +3,7 @@ import { redis, sessionKey } from "@/lib/redis";
 import { ApiError } from "@/lib/api";
 import type { Role } from "@prisma/client";
 
-export type AuthedUser = { id: string; email: string; role: Role };
+export type AuthedUser = { id: string; email: string; role: Role; sid?: string };
 
 /**
  * Authoritative auth check for route handlers / server components (Node runtime).
@@ -33,6 +33,7 @@ export async function requireUser(): Promise<AuthedUser> {
     id: session.user.id,
     email: session.user.email,
     role: session.user.role,
+    sid: session.sid,
   };
 }
 

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
-import { redis, sessionKey } from "@/lib/redis";
+import { redis, sessionKey, CHANNELS } from "@/lib/redis";
 import { ADMIN_ID } from "@/lib/config";
 
 const credsSchema = z.object({
@@ -54,17 +54,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt(params) {
       const token = await authConfig.callbacks.jwt(params);
       // Only regular users are pinned to a single device; admin may log in
-      // concurrently on multiple devices.
+      // concurrently on multiple devices. On sign-in we take over the active
+      // session and, if a different device held it, push a real-time revoke to
+      // that device's session channel so it logs out immediately.
       if (params.user && token && token.role !== "ADMIN") {
+        const prevSid = await redis.get(sessionKey(token.userId));
         await redis.set(sessionKey(token.userId), token.sid);
+        if (prevSid && prevSid !== token.sid) {
+          await redis.publish(CHANNELS.session(prevSid), JSON.stringify({ type: "sessionRevoked" }));
+        }
       }
       return token;
     },
   },
   events: {
     async signOut(message) {
-      const userId = "token" in message ? message.token?.userId : undefined;
-      if (userId) await redis.del(sessionKey(userId));
+      const token = "token" in message ? message.token : undefined;
+      // Only clear the active-session record if THIS device still owns it.
+      // A device that was kicked (its sid is no longer active) must not delete
+      // the record now held by the device that took over.
+      if (token?.userId) {
+        const active = await redis.get(sessionKey(token.userId));
+        if (active && active === token.sid) await redis.del(sessionKey(token.userId));
+      }
     },
   },
 });

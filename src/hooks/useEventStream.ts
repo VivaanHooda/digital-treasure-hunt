@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { signOut } from "next-auth/react";
 
 export const queryKeys = {
   gameState: ["gameState"] as const,
@@ -39,6 +40,17 @@ export function useEventStream(enabled = true) {
     es.addEventListener("settings", () => {
       invalidate(queryKeys.gameState);
       invalidate(queryKeys.adminSettings);
+    });
+
+    // This account signed in on another device — drop this session immediately.
+    let revoked = false;
+    es.addEventListener("sessionRevoked", () => {
+      if (revoked) return;
+      revoked = true;
+      es.close();
+      void signOut({ redirect: false }).finally(() => {
+        window.location.href = "/login?kicked=1";
+      });
     });
 
     // On error EventSource reconnects automatically; the next snapshot reconciles.

@@ -10,6 +10,8 @@ interface SheetProps {
   onClose?: () => void;
   /** When false, the sheet cannot be dismissed (e.g. the active dossier). */
   dismissible?: boolean;
+  /** When false, drag-to-dismiss is off (better for form sheets); backdrop/Esc still close. */
+  draggable?: boolean;
   className?: string;
   children: React.ReactNode;
 }
@@ -18,7 +20,7 @@ interface SheetProps {
    Sheet — a classified file rising from the bottom. Drag down to dismiss
    (when dismissible). Backdrop dims the archive rather than hiding it.
    ─────────────────────────────────────────────────────────────────────────── */
-export function Sheet({ open, onClose, dismissible = true, className, children }: SheetProps) {
+export function Sheet({ open, onClose, dismissible = true, draggable = true, className, children }: SheetProps) {
   const reduce = useReducedMotion();
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export function Sheet({ open, onClose, dismissible = true, className, children }
             animate={reduce ? { opacity: 1 } : { y: 0 }}
             exit={reduce ? { opacity: 0 } : { y: "100%" }}
             transition={springHeavy}
-            drag={dismissible && !reduce ? "y" : false}
+            drag={dismissible && draggable && !reduce ? "y" : false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={(_, info) => {

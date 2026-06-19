@@ -2,11 +2,19 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Database, Plus, Trash2, Pencil, Lock, ChevronLeft, Image as ImageIcon, ScrollText,
-  Upload, Link as LinkIcon, Loader2, CheckCircle, XCircle, Save,
+  Plus, Trash2, Pencil, Lock, ChevronLeft, ChevronRight, Image as ImageIcon, ScrollText,
+  Upload, Link as LinkIcon, Loader2, Save,
 } from "lucide-react";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
+import { Panel } from "@/components/ui/Panel";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Button } from "@/components/ui/Button";
+import { Sheet } from "@/components/ui/Sheet";
+import { cn } from "@/lib/cn";
+import { settle } from "@/lib/motion";
 
 type DatasetRow = {
   id: string; name: string; challengeCount: number; pictureCount: number; riddleCount: number;
@@ -25,6 +33,9 @@ const emptyDraft = (): Draft => ({
   latitude: "", longitude: "", marginOfError: "50", points: "10",
 });
 
+const textareaCls =
+  "w-full rounded-xl border border-line bg-paper-1 px-4 py-3 text-[16px] text-ink outline-none transition-colors placeholder:text-ink-3/70 focus:border-signal focus:bg-paper-2 disabled:opacity-50";
+
 async function uploadImage(file: File, datasetId: string): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
@@ -35,6 +46,25 @@ async function uploadImage(file: File, datasetId: string): Promise<string> {
     throw new Error(e.error || "Upload failed");
   }
   return (await r.json()).url as string;
+}
+
+function Flash({ msg }: { msg: { ok: boolean; text: string } | null }) {
+  return (
+    <AnimatePresence>
+      {msg && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={settle}
+          className={cn("mb-4 flex items-center gap-3 border-l-2 pl-4 text-sm", msg.ok ? "border-ok text-ok" : "border-alert text-alert")}
+        >
+          <span className={cn("h-1.5 w-1.5 rounded-full", msg.ok ? "bg-ok" : "bg-alert")} />
+          {msg.text}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 export function DatasetsManager() {
@@ -70,77 +100,54 @@ export function DatasetsManager() {
   const managed = datasets.data?.datasets.find((d) => d.id === manageId) ?? null;
 
   if (manageId && managed) {
-    return (
-      <ChallengeManager
-        dataset={managed}
-        onBack={() => setManageId(null)}
-        onChanged={refetchDatasets}
-        flash={flash}
-        onErr={onErr}
-      />
-    );
+    return <ChallengeManager dataset={managed} onBack={() => setManageId(null)} onChanged={refetchDatasets} flash={flash} onErr={onErr} />;
   }
 
   return (
-    <div className="rounded-2xl border border-gray-700/50 bg-gray-800/40 p-6 backdrop-blur-xl">
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white">
-        <Database className="h-5 w-5 text-indigo-400" /> Challenge Datasets
-      </h2>
+    <Panel label="Challenge Datasets" bodyClassName="p-4">
+      <Flash msg={msg} />
 
-      {msg && (
-        <div className={`mb-4 flex items-center gap-2 rounded-lg border p-2 text-sm ${msg.ok ? "border-green-500/50 bg-green-500/10 text-green-300" : "border-red-500/50 bg-red-500/10 text-red-300"}`}>
-          {msg.ok ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />} {msg.text}
+      <div className="mb-5 flex items-end gap-3">
+        <div className="flex-1">
+          <Input label="New Dataset" value={newName} onChange={(e) => setNewName(e.target.value)} />
         </div>
-      )}
-
-      <div className="mb-4 flex gap-2">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="New dataset name"
-          className="flex-1 rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2 text-white focus:border-indigo-400 focus:outline-none"
-        />
-        <button
-          onClick={() => newName.trim() && createDs.mutate(newName.trim())}
-          disabled={createDs.isPending || !newName.trim()}
-          className="flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
+        <Button noMagnet disabled={createDs.isPending || !newName.trim()} onClick={() => newName.trim() && createDs.mutate(newName.trim())}>
           <Plus className="h-4 w-4" /> Create
-        </button>
+        </Button>
       </div>
 
-      <div className="space-y-2">
+      <ul className="divide-y divide-line border-t border-line">
         {datasets.data?.datasets.map((d) => (
-          <div key={d.id} className="flex items-center justify-between rounded-lg border border-gray-700/40 bg-gray-900/40 p-3">
+          <li key={d.id} className="flex items-center justify-between gap-4 py-4">
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-white">{d.name}</span>
-                {d.selected && <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs text-cyan-300">Selected</span>}
-                {d.locked && <span className="flex items-center gap-1 rounded-full bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300"><Lock className="h-3 w-3" /> Locked</span>}
-                {d.used && !d.locked && <span className="rounded-full bg-gray-500/20 px-2 py-0.5 text-xs text-gray-300">Used</span>}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-serif text-lg text-ink">{d.name}</span>
+                {d.selected && <span className="label !text-signal">Selected</span>}
+                {d.locked && <span className="flex items-center gap-1 label !text-signal"><Lock className="h-3 w-3" /> Locked</span>}
+                {d.used && !d.locked && <span className="label !text-ink-3">Used</span>}
               </div>
-              <p className="text-xs text-gray-400">{d.challengeCount} challenges · {d.pictureCount} pictures · {d.riddleCount} riddles</p>
+              <p className="data mt-1 text-xs text-ink-3">{d.challengeCount} challenges · {d.pictureCount} pictures · {d.riddleCount} riddles</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setManageId(d.id)} className="rounded bg-blue-600/80 px-3 py-1.5 text-xs text-white hover:bg-blue-600">Manage</button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button size="sm" variant="outline" noMagnet onClick={() => setManageId(d.id)}>Manage</Button>
               <button
                 onClick={() => { const n = prompt("Rename dataset", d.name); if (n && n.trim()) renameDs.mutate({ id: d.id, name: n.trim() }); }}
                 disabled={d.locked}
-                className="rounded bg-gray-600/80 px-2 py-1.5 text-xs text-white hover:bg-gray-600 disabled:opacity-40"
                 title="Rename"
-              ><Pencil className="h-3.5 w-3.5" /></button>
+                className="rounded-md p-2 text-ink-3 transition-colors hover:text-ink disabled:opacity-30"
+              ><Pencil className="h-4 w-4" /></button>
               <button
                 onClick={() => { if (confirm(`Delete dataset "${d.name}"? This cannot be undone.`)) deleteDs.mutate(d.id); }}
                 disabled={d.used}
-                className="rounded bg-red-600/80 px-2 py-1.5 text-xs text-white hover:bg-red-600 disabled:opacity-40"
                 title={d.used ? "Used by a game — cannot delete" : "Delete"}
-              ><Trash2 className="h-3.5 w-3.5" /></button>
+                className="rounded-md p-2 text-ink-3 transition-colors hover:text-alert disabled:opacity-30"
+              ><Trash2 className="h-4 w-4" /></button>
             </div>
-          </div>
+          </li>
         ))}
-        {datasets.data?.datasets.length === 0 && <p className="text-sm text-gray-400">No datasets yet. Create one above.</p>}
-      </div>
-    </div>
+        {datasets.data?.datasets.length === 0 && <li className="label py-6 text-center">No datasets yet. Create one above.</li>}
+      </ul>
+    </Panel>
   );
 }
 
@@ -159,6 +166,7 @@ function ChallengeManager({
   const challenges = useQuery({ queryKey: key, queryFn: () => apiGet<{ challenges: Challenge[] }>(`/api/admin/datasets/${dataset.id}/challenges`) });
   const refetch = () => { qc.invalidateQueries({ queryKey: key }); onChanged(); };
 
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
 
@@ -175,12 +183,12 @@ function ChallengeManager({
 
   const create = useMutation({
     mutationFn: () => apiSend(`/api/admin/datasets/${dataset.id}/challenges`, "POST", toPayload(draft)),
-    onSuccess: () => { refetch(); setDraft(emptyDraft()); flash(true, "Challenge added"); },
+    onSuccess: () => { refetch(); setEditorOpen(false); setDraft(emptyDraft()); flash(true, "Challenge added"); },
     onError: onErr,
   });
   const update = useMutation({
     mutationFn: (id: string) => apiSend(`/api/admin/challenges/${id}`, "PATCH", toPayload(draft)),
-    onSuccess: () => { refetch(); setEditingId(null); setDraft(emptyDraft()); flash(true, "Challenge updated"); },
+    onSuccess: () => { refetch(); setEditorOpen(false); setEditingId(null); setDraft(emptyDraft()); flash(true, "Challenge updated"); },
     onError: onErr,
   });
   const remove = useMutation({
@@ -189,115 +197,129 @@ function ChallengeManager({
     onError: onErr,
   });
 
-  const startEdit = (c: Challenge) => {
+  const list = challenges.data?.challenges ?? [];
+  const loadDraft = (c: Challenge) => setDraft({
+    type: c.type, title: c.title, description: c.description, imageUrl: c.imageUrl ?? "",
+    latitude: String(c.latitude), longitude: String(c.longitude),
+    marginOfError: String(c.marginOfError), points: String(c.points),
+  });
+  const openAdd = () => { setEditingId(null); setDraft(emptyDraft()); setEditorOpen(true); };
+  const openEdit = (c: Challenge) => {
+    if (locked) return;
     setEditingId(c.id);
-    setDraft({
-      type: c.type, title: c.title, description: c.description, imageUrl: c.imageUrl ?? "",
-      latitude: String(c.latitude), longitude: String(c.longitude),
-      marginOfError: String(c.marginOfError), points: String(c.points),
-    });
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    loadDraft(c);
+    setEditorOpen(true);
   };
-
-  const input = "w-full rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2 text-white focus:border-indigo-400 focus:outline-none disabled:opacity-50";
+  // Step to an adjacent challenge while the editor is open (discards unsaved edits).
+  const currentIndex = editingId ? list.findIndex((c) => c.id === editingId) : -1;
+  const step = (delta: number) => {
+    const next = list[currentIndex + delta];
+    if (next) { setEditingId(next.id); loadDraft(next); }
+  };
+  const saving = create.isPending || update.isPending;
 
   return (
-    <div className="rounded-2xl border border-gray-700/50 bg-gray-800/40 p-6 backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-1 text-gray-300 hover:text-white"><ChevronLeft className="h-4 w-4" /> All datasets</button>
-        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-          {dataset.name}
-          {locked && <span className="flex items-center gap-1 rounded-full bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300"><Lock className="h-3 w-3" /> Locked</span>}
-        </h2>
+    <Panel label={dataset.name} bodyClassName="p-4" aside={locked ? <span className="flex items-center gap-1 label !text-signal"><Lock className="h-3 w-3" /> Locked</span> : undefined}>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-ink-2 transition-colors hover:text-ink">
+          <ChevronLeft className="h-4 w-4" /> All datasets
+        </button>
+        <Button size="sm" noMagnet disabled={locked} onClick={openAdd}><Plus className="h-4 w-4" /> Add Challenge</Button>
       </div>
 
       {locked && (
-        <p className="mb-4 rounded-lg border border-orange-500/40 bg-orange-500/10 p-3 text-sm text-orange-300">
+        <p className="mb-5 border-l-2 border-signal pl-4 text-sm text-ink-2">
           This dataset is in use by a running game and cannot be edited until the game ends.
         </p>
       )}
 
-      {/* Existing challenges */}
-      <div className="mb-6 space-y-2">
+      {/* Challenges — click any row to edit (opens the editor sheet) */}
+      <ul className="divide-y divide-line border-y border-line">
         {challenges.data?.challenges.map((c) => (
-          <div key={c.id} className="flex items-center justify-between rounded-lg border border-gray-700/40 bg-gray-900/40 p-3">
-            <div className="flex items-center gap-3 min-w-0">
-              {c.type === "PICTURE" ? <ImageIcon className="h-4 w-4 flex-shrink-0 text-blue-400" /> : <ScrollText className="h-4 w-4 flex-shrink-0 text-purple-400" />}
+          <li key={c.id} className="flex items-center gap-2 rounded-lg transition-colors hover:bg-paper-1">
+            <button
+              onClick={() => openEdit(c)}
+              disabled={locked}
+              className="flex min-w-0 flex-1 items-center gap-3 py-3.5 pl-2 text-left disabled:cursor-default"
+            >
+              {c.type === "PICTURE" ? <ImageIcon className="h-4 w-4 shrink-0 text-signal" /> : <ScrollText className="h-4 w-4 shrink-0 text-ink-2" />}
               <div className="min-w-0">
-                <p className="truncate font-medium text-white">{c.position + 1}. {c.title}</p>
-                <p className="text-xs text-gray-400">{c.points} pts · ±{c.marginOfError}m · {c.latitude.toFixed(5)}, {c.longitude.toFixed(5)}</p>
+                <p className="truncate text-ink">{c.position + 1}. {c.title}</p>
+                <p className="data mt-0.5 truncate text-xs text-ink-3">{c.points} pts · ±{c.marginOfError}m · {c.latitude.toFixed(5)}, {c.longitude.toFixed(5)}</p>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => startEdit(c)} disabled={locked} className="rounded bg-gray-600/80 px-2 py-1.5 text-xs text-white hover:bg-gray-600 disabled:opacity-40"><Pencil className="h-3.5 w-3.5" /></button>
-              <button onClick={() => { if (confirm("Delete this challenge?")) remove.mutate(c.id); }} disabled={locked} className="rounded bg-red-600/80 px-2 py-1.5 text-xs text-white hover:bg-red-600 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
+            </button>
+            <button
+              onClick={() => { if (confirm("Delete this challenge?")) remove.mutate(c.id); }}
+              disabled={locked}
+              className="mr-1 shrink-0 rounded-md p-2 text-ink-3 transition-colors hover:text-alert disabled:opacity-30"
+              title="Delete"
+            ><Trash2 className="h-4 w-4" /></button>
+          </li>
         ))}
-        {challenges.data?.challenges.length === 0 && <p className="text-sm text-gray-400">No challenges yet — add one below.</p>}
-      </div>
+        {challenges.data?.challenges.length === 0 && <li className="label py-6 text-center">No challenges yet — add one above.</li>}
+      </ul>
 
-      {/* Add / edit form */}
-      <div className="rounded-xl border border-gray-700/50 bg-gray-900/40 p-4">
-        <h3 className="mb-3 font-semibold text-white">{editingId ? "Edit challenge" : "Add challenge"}</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Labeled label="Challenge type">
-            <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as Draft["type"] })} disabled={locked} className={input}>
-              <option value="PICTURE">Picture</option>
-              <option value="RIDDLE">Riddle</option>
-            </select>
-          </Labeled>
-          <Labeled label="Title (heading)">
-            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="e.g. Front Gate" disabled={locked} className={input} />
-          </Labeled>
-          <Labeled label={draft.type === "RIDDLE" ? "Riddle text" : "Description"} className="sm:col-span-2">
-            <textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder={draft.type === "RIDDLE" ? "Write the riddle…" : "Describe the challenge…"} rows={2} disabled={locked} className={input} />
-          </Labeled>
-          <Labeled label="Latitude">
-            <input value={draft.latitude} onChange={(e) => setDraft({ ...draft, latitude: e.target.value })} placeholder="12.92403" inputMode="decimal" disabled={locked} className={input} />
-          </Labeled>
-          <Labeled label="Longitude">
-            <input value={draft.longitude} onChange={(e) => setDraft({ ...draft, longitude: e.target.value })} placeholder="77.50119" inputMode="decimal" disabled={locked} className={input} />
-          </Labeled>
-          <Labeled label="Margin of error (meters)">
-            <input value={draft.marginOfError} onChange={(e) => setDraft({ ...draft, marginOfError: e.target.value })} placeholder="50" inputMode="numeric" disabled={locked} className={input} />
-          </Labeled>
-          <Labeled label="Points">
-            <input value={draft.points} onChange={(e) => setDraft({ ...draft, points: e.target.value })} placeholder="10" inputMode="numeric" disabled={locked} className={input} />
-          </Labeled>
+      {/* Editor — rises in place; no scrolling past challenges to reach a form */}
+      <Sheet open={editorOpen} onClose={() => setEditorOpen(false)} draggable={false}>
+        <div className="pb-2">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="label">{editingId ? "Edit Challenge" : "New Challenge"}</div>
+            {editingId && currentIndex >= 0 && list.length > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => step(-1)}
+                  disabled={currentIndex <= 0}
+                  className="rounded-md border border-line-strong p-1.5 text-ink-2 transition-colors hover:text-ink disabled:opacity-30"
+                  aria-label="Previous challenge"
+                ><ChevronLeft className="h-4 w-4" /></button>
+                <span className="data px-1 text-xs tabular-nums text-ink-3">{currentIndex + 1}/{list.length}</span>
+                <button
+                  onClick={() => step(1)}
+                  disabled={currentIndex >= list.length - 1}
+                  className="rounded-md border border-line-strong p-1.5 text-ink-2 transition-colors hover:text-ink disabled:opacity-30"
+                  aria-label="Next challenge"
+                ><ChevronRight className="h-4 w-4" /></button>
+              </div>
+            )}
+          </div>
+          <h2 className="mb-6 font-serif text-3xl text-ink">{draft.title.trim() || "Untitled File"}</h2>
+
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+            <Select
+              label="Type"
+              value={draft.type}
+              onChange={(v) => setDraft({ ...draft, type: v as Draft["type"] })}
+              options={[{ value: "PICTURE", label: "Picture" }, { value: "RIDDLE", label: "Riddle" }]}
+            />
+            <Input label="Title (heading)" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} disabled={locked} placeholder="e.g. Front Gate" />
+            <div className="sm:col-span-2">
+              <label className="label mb-2 block">{draft.type === "RIDDLE" ? "Riddle Text" : "Description"}</label>
+              <textarea
+                value={draft.description}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                placeholder={draft.type === "RIDDLE" ? "Write the riddle…" : "Describe the challenge…"}
+                rows={3}
+                disabled={locked}
+                className={textareaCls}
+              />
+            </div>
+            <Input label="Latitude" value={draft.latitude} onChange={(e) => setDraft({ ...draft, latitude: e.target.value })} placeholder="12.92403" inputMode="decimal" disabled={locked} />
+            <Input label="Longitude" value={draft.longitude} onChange={(e) => setDraft({ ...draft, longitude: e.target.value })} placeholder="77.50119" inputMode="decimal" disabled={locked} />
+            <Input label="Margin of Error (m)" value={draft.marginOfError} onChange={(e) => setDraft({ ...draft, marginOfError: e.target.value })} placeholder="50" inputMode="numeric" disabled={locked} />
+            <Input label="Points" value={draft.points} onChange={(e) => setDraft({ ...draft, points: e.target.value })} placeholder="10" inputMode="numeric" disabled={locked} />
+          </div>
+
+          <ImageInput value={draft.imageUrl} datasetId={dataset.id} disabled={locked} onChange={(url) => setDraft({ ...draft, imageUrl: url })} onErr={onErr} />
+
+          <div className="mt-7 flex gap-3">
+            <Button variant="ghost" size="lg" className="flex-1" noMagnet onClick={() => setEditorOpen(false)}>Cancel</Button>
+            <Button size="lg" className="flex-1" noMagnet disabled={locked || saving} onClick={() => (editingId ? update.mutate(editingId) : create.mutate())}>
+              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-4 w-4" /> {editingId ? "Save changes" : "Add challenge"}</>}
+            </Button>
+          </div>
         </div>
-
-        <ImageInput
-          value={draft.imageUrl}
-          datasetId={dataset.id}
-          disabled={locked}
-          onChange={(url) => setDraft({ ...draft, imageUrl: url })}
-          onErr={onErr}
-        />
-
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={() => (editingId ? update.mutate(editingId) : create.mutate())}
-            disabled={locked || create.isPending || update.isPending}
-            className="flex items-center gap-1 rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" /> {editingId ? "Save changes" : "Add challenge"}
-          </button>
-          {editingId && (
-            <button onClick={() => { setEditingId(null); setDraft(emptyDraft()); }} className="rounded-lg bg-gray-600 px-4 py-2 font-semibold text-white hover:bg-gray-700">Cancel</button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Labeled({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
-  return (
-    <label className={`block ${className}`}>
-      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">{label}</span>
-      {children}
-    </label>
+      </Sheet>
+    </Panel>
   );
 }
 
@@ -308,7 +330,6 @@ function ImageInput({
 }) {
   const [mode, setMode] = useState<"upload" | "link">("upload");
   const [uploading, setUploading] = useState(false);
-  const input = "w-full rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2 text-white focus:border-indigo-400 focus:outline-none disabled:opacity-50";
 
   const onFile = async (file?: File) => {
     if (!file) return;
@@ -323,27 +344,42 @@ function ImageInput({
   };
 
   return (
-    <div className="mt-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm text-gray-300">Image</span>
-        <div className="flex overflow-hidden rounded-lg border border-gray-700/50 text-xs">
-          <button type="button" onClick={() => setMode("upload")} disabled={disabled} className={`flex items-center gap-1 px-2 py-1 ${mode === "upload" ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-300"}`}><Upload className="h-3 w-3" /> Upload</button>
-          <button type="button" onClick={() => setMode("link")} disabled={disabled} className={`flex items-center gap-1 px-2 py-1 ${mode === "link" ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-300"}`}><LinkIcon className="h-3 w-3" /> Link</button>
+    <div className="mt-5">
+      <div className="mb-2 flex items-center gap-3">
+        <span className="label">Image</span>
+        <div className="flex gap-1 rounded-lg border border-line p-0.5">
+          <button type="button" onClick={() => setMode("upload")} disabled={disabled} className={cn("flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors", mode === "upload" ? "bg-signal text-paper" : "text-ink-3 hover:text-ink")}><Upload className="h-3 w-3" /> Upload</button>
+          <button type="button" onClick={() => setMode("link")} disabled={disabled} className={cn("flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors", mode === "link" ? "bg-signal text-paper" : "text-ink-3 hover:text-ink")}><LinkIcon className="h-3 w-3" /> Link</button>
         </div>
-        <span className="text-xs text-gray-500">(required for pictures)</span>
+        <span className="data text-xs text-ink-3">(required for pictures)</span>
       </div>
 
       {mode === "upload" ? (
-        <input key="upload" type="file" accept="image/png,image/jpeg,image/webp" disabled={disabled || uploading} onChange={(e) => onFile(e.target.files?.[0])} className={input} />
+        <input
+          key="upload"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={disabled || uploading}
+          onChange={(e) => onFile(e.target.files?.[0])}
+          className="w-full rounded-xl border border-line bg-paper-1 px-4 py-3 text-sm text-ink-2 outline-none transition-colors file:mr-3 file:rounded-md file:border-0 file:bg-paper-3 file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-paper-2 disabled:opacity-50"
+        />
       ) : (
-        <input key="link" type="url" value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://example.com/image.jpg" disabled={disabled} className={input} />
+        <input
+          key="link"
+          type="url"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://example.com/image.jpg"
+          disabled={disabled}
+          className={textareaCls}
+        />
       )}
 
-      {uploading && <p className="mt-1 flex items-center gap-1 text-xs text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</p>}
+      {uploading && <p className="mt-2 flex items-center gap-1.5 data text-xs text-ink-3"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</p>}
       {value && (
-        <div className="mt-2">
+        <div className="mt-3 flex justify-center rounded-xl border border-line-strong bg-paper-2 p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="preview" className="h-28 rounded-lg border border-gray-700/50 object-cover" />
+          <img src={value} alt="preview" className="max-h-72 w-auto rounded-lg object-contain" />
         </div>
       )}
     </div>

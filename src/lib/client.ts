@@ -19,6 +19,15 @@ async function parse<T>(res: Response): Promise<T> {
     } catch {
       /* non-JSON error */
     }
+    // Fallback for a device that missed the real-time revoke (e.g. no live
+    // stream): the next API call learns the session was taken over → log out.
+    if (
+      typeof window !== "undefined" &&
+      body?.code === "SESSION_REVOKED" &&
+      !window.location.pathname.startsWith("/login")
+    ) {
+      window.location.href = "/login?kicked=1";
+    }
     throw new ClientError(res.status, body?.error ?? res.statusText, body?.code);
   }
   return res.json() as Promise<T>;

@@ -30,4 +30,7 @@ export const CHANNELS = {
   settings: "rt:settings",
   notifications: "rt:notifications",
   userGameState: (userId: string) => `rt:user:${userId}:gameState`,
+  // Per-session channel — used to revoke a specific device in real time when
+  // its account signs in elsewhere (single-device takeover).
+  session: (sid: string) => `rt:session:${sid}`,
 } as const;

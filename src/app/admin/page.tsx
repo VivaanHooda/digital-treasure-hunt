@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Shield, Settings, Pause, Play, Square, Clock, Bell, Send, Users, Download, Trash2, Database,
-  AlertTriangle, Loader2, LogOut, CheckCircle, XCircle,
+  Pause, Play, Square, Send, Download, Trash2, AlertTriangle, Loader2, LogOut, X, ChevronRight,
 } from "lucide-react";
-import { PageBackground } from "@/components/PageBackground";
+import Link from "next/link";
 import { useEventStream } from "@/hooks/useEventStream";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
-import { DatasetsManager } from "@/components/admin/DatasetsManager";
+import { Panel } from "@/components/ui/Panel";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/cn";
+import { springHeavy, settle } from "@/lib/motion";
 
 type AdminSettings = {
   startTime: string;
@@ -58,7 +63,6 @@ const toLocalInput = (iso: string) => {
 
 export default function AdminPage() {
   useEventStream(true);
-  // 1s tick so the live status/timer recompute (e.g. SCHEDULED → RUNNING → ENDED).
   const [, forceTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => forceTick((x) => x + 1), 1000);
@@ -124,7 +128,6 @@ export default function AdminPage() {
   const [showStop, setShowStop] = useState(false);
   const [stopPassword, setStopPassword] = useState("");
 
-  // Seed local form state once settings load.
   const s = settings.data;
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
@@ -136,47 +139,62 @@ export default function AdminPage() {
     }
   }, [s, seeded]);
 
-  const card = "rounded-2xl border border-gray-700/50 bg-gray-800/40 p-6 backdrop-blur-xl";
-  const input = "w-full rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2.5 text-white focus:border-cyan-400 focus:outline-none";
-
   return (
-    <div className="min-h-screen">
-      <PageBackground />
-      <nav className="border-b border-gray-700/50 bg-gray-900/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <div className="flex items-center gap-2 font-bold text-white">
-            <Shield className="h-6 w-6 text-red-500" /> Admin Control Panel
+    <div className="min-h-dvh">
+      {/* Command header */}
+      <header className="sticky top-0 z-20 border-b border-line bg-paper">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2 w-2 animate-breathe rounded-full bg-signal" />
+            <span className="label !text-signal">Command</span>
+            <span className="font-serif text-xl text-ink">Control</span>
           </div>
           <button
             onClick={() => signOut({ redirectTo: "/login" })}
-            className="flex items-center gap-1 rounded-lg bg-red-600/80 px-3 py-2 text-sm font-medium text-white hover:bg-red-600"
+            className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-2 transition-colors hover:border-alert/50 hover:text-alert"
           >
-            <LogOut className="h-4 w-4" /> Logout
+            <LogOut className="h-4 w-4" /> Sign out
           </button>
         </div>
-      </nav>
+      </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-        {msg && (
-          <div className={`flex items-center gap-2 rounded-xl border p-3 text-sm ${msg.ok ? "border-green-500/50 bg-green-500/10 text-green-300" : "border-red-500/50 bg-red-500/10 text-red-300"}`}>
-            {msg.ok ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />} {msg.text}
-          </div>
-        )}
+      <main className="mx-auto max-w-5xl space-y-10 px-5 pb-24 pt-8">
+        {/* Flash */}
+        <AnimatePresence>
+          {msg && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={settle}
+              className={cn("flex items-center gap-3 border-l-2 pl-4 text-sm", msg.ok ? "border-ok text-ok" : "border-alert text-alert")}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", msg.ok ? "bg-ok" : "bg-alert")} />
+              {msg.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatBox label="Teams" value={stats.data?.totalTeams} />
-          <StatBox label="Completed" value={stats.data?.completedTeams} />
-          <StatBox label="Avg Score" value={stats.data?.averageScore} />
-          <StatBox label="Top Score" value={stats.data?.topScore} />
-        </div>
+        <section className="grid grid-cols-2 gap-y-5 sm:grid-cols-4">
+          {[
+            ["Units", stats.data?.totalTeams],
+            ["Completed", stats.data?.completedTeams],
+            ["Avg Score", stats.data?.averageScore],
+            ["Top Score", stats.data?.topScore],
+          ].map(([label, value]) => (
+            <div key={label as string} className="border-l border-line pl-4">
+              <span className="label block">{label as string}</span>
+              <span className="data mt-1 block text-2xl tabular-nums text-ink">{value ?? "—"}</span>
+            </div>
+          ))}
+        </section>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Game Control */}
-          <div className={card}>
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Settings className="h-5 w-5 text-cyan-400" /> Game Control</h2>
+          <Panel label="Operation Control">
             {!s ? (
-              <p className="text-gray-400">Loading…</p>
+              <p className="label py-6 text-center">Loading…</p>
             ) : (
               <GameControl
                 s={s}
@@ -187,7 +205,6 @@ export default function AdminPage() {
                 setHours={setHours}
                 minutes={minutes}
                 setMinutes={setMinutes}
-                input={input}
                 onSelectDataset={(id) => saveSettings.mutate({ selectedDatasetId: id })}
                 onStart={() => {
                   if (!s.selectedDatasetId) { flash(false, "Select a dataset first."); return; }
@@ -199,151 +216,179 @@ export default function AdminPage() {
                 pausing={pause.isPending}
               />
             )}
-          </div>
+          </Panel>
 
-          {/* Actions */}
-          <div className={card}>
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Database className="h-5 w-5 text-purple-400" /> Game Actions</h2>
+          {/* Operations */}
+          <Panel label="Operations" bodyClassName="p-4 space-y-3">
+            <Link
+              href="/admin/datasets"
+              className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
+            >
+              <span>Manage Challenge Datasets</span>
+              <ChevronRight className="h-4 w-4 text-signal" />
+            </Link>
             <a
               href="/api/admin/export"
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 font-semibold text-white hover:bg-teal-700"
+              className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
             >
-              <Download className="h-5 w-5" /> Download Attendance CSV
+              <span>Download Attendance CSV</span>
+              <Download className="h-4 w-4 text-signal" />
             </a>
             <button
               onClick={() => setShowTeams((v) => !v)}
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700"
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
             >
-              <Users className="h-5 w-5" /> {showTeams ? "Hide" : "View"} Teams ({teams.data?.teams.length ?? 0})
+              <span>{showTeams ? "Hide" : "View"} Registered Units</span>
+              <span className="data text-sm text-ink-2">{teams.data?.teams.length ?? 0}</span>
             </button>
             <button
               onClick={() => setConfirmReset(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700"
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-alert/30 px-4 py-3.5 text-alert transition-colors hover:bg-alert/10"
             >
-              <Trash2 className="h-5 w-5" /> Reset All Teams
+              <span>Reset All Units</span>
+              <Trash2 className="h-4 w-4" />
             </button>
-            <p className="mt-3 text-xs text-gray-500">Reset wipes all team accounts &amp; progress. Stopping a game (in Game Control) ends it but keeps teams.</p>
-          </div>
+            <p className="data text-xs leading-relaxed text-ink-3">
+              Reset wipes all unit accounts &amp; progress. Stopping a game (in Operation Control) ends it but keeps units.
+            </p>
+          </Panel>
         </div>
 
-        {/* Teams table */}
-        {showTeams && (
-          <div className={card}>
-            <h2 className="mb-4 text-lg font-bold text-white">Registered Teams</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-xs uppercase text-gray-400">
-                  <tr><th className="p-2">Team</th><th className="p-2">Leader</th><th className="p-2">Email</th><th className="p-2">Phone</th><th className="p-2 text-right">Score</th></tr>
-                </thead>
-                <tbody>
+        {/* Teams list */}
+        <AnimatePresence>
+          {showTeams && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={settle} className="overflow-hidden">
+              <Panel label="Registered Units" bodyClassName="p-0">
+                <ul className="divide-y divide-line">
                   {teams.data?.teams.map((t) => (
-                    <tr key={t.id} className="border-t border-gray-700/30 text-gray-200">
-                      <td className="p-2 font-medium">{t.teamName}</td>
-                      <td className="p-2">{t.leaderName}</td>
-                      <td className="p-2">{t.leaderEmail}</td>
-                      <td className="p-2">{t.leaderMobile}</td>
-                      <td className="p-2 text-right font-bold text-cyan-300">{t.score}</td>
-                    </tr>
+                    <li key={t.id} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="truncate font-serif text-lg text-ink">{t.teamName}</p>
+                        <p className="data mt-0.5 truncate text-xs text-ink-3">{t.leaderName} · {t.leaderEmail} · {t.leaderMobile}</p>
+                      </div>
+                      <span className="data shrink-0 text-xl tabular-nums text-signal">{t.score}</span>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                  {teams.data?.teams.length === 0 && <li className="label px-4 py-6 text-center">No units registered</li>}
+                </ul>
+              </Panel>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Broadcast */}
+        <Panel label="Broadcast Transmission" bodyClassName="p-4">
+          <div className="space-y-5">
+            <Input label="Title (optional)" value={noteForm.title} onChange={(e) => setNoteForm({ ...noteForm, title: e.target.value })} />
+            <div>
+              <label className="label mb-2 block">Message</label>
+              <textarea
+                rows={3}
+                value={noteForm.message}
+                onChange={(e) => setNoteForm({ ...noteForm, message: e.target.value })}
+                className="w-full rounded-xl border border-line bg-paper-1 px-4 py-3 text-[16px] text-ink outline-none transition-colors placeholder:text-ink-3/70 focus:border-signal focus:bg-paper-2"
+                placeholder="Transmission to all field units…"
+              />
+            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="sm:w-48">
+                <Select
+                  label="Severity"
+                  value={noteForm.type}
+                  onChange={(v) => setNoteForm({ ...noteForm, type: v })}
+                  options={[
+                    { value: "info", label: "Info" },
+                    { value: "warning", label: "Warning" },
+                    { value: "success", label: "Success" },
+                    { value: "error", label: "Error" },
+                  ]}
+                />
+              </div>
+              <Button
+                size="lg"
+                noMagnet
+                disabled={sendNote.isPending || !noteForm.message.trim()}
+                onClick={() => { if (noteForm.message.trim()) { sendNote.mutate(noteForm); setNoteForm({ title: "", message: "", type: "info" }); } }}
+              >
+                <Send className="h-4 w-4" /> Transmit
+              </Button>
             </div>
           </div>
-        )}
 
-        {/* Challenge Datasets */}
-        <DatasetsManager />
-
-        {/* Notifications */}
-        <div className={card}>
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Bell className="h-5 w-5 text-yellow-400" /> Send Notification</h2>
-          <input className={input} placeholder="Title (optional)" value={noteForm.title} onChange={(e) => setNoteForm({ ...noteForm, title: e.target.value })} />
-          <textarea className={`${input} mt-3`} rows={3} placeholder="Message" value={noteForm.message} onChange={(e) => setNoteForm({ ...noteForm, message: e.target.value })} />
-          <div className="mt-3 flex gap-3">
-            <select className={input} value={noteForm.type} onChange={(e) => setNoteForm({ ...noteForm, type: e.target.value })}>
-              <option value="info">Info</option><option value="warning">Warning</option><option value="success">Success</option><option value="error">Error</option>
-            </select>
-            <button
-              onClick={() => { if (noteForm.message.trim()) { sendNote.mutate(noteForm); setNoteForm({ title: "", message: "", type: "info" }); } }}
-              disabled={sendNote.isPending || !noteForm.message.trim()}
-              className="flex items-center gap-2 rounded-xl bg-yellow-600 px-5 py-2.5 font-semibold text-white hover:bg-yellow-700 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" /> Send
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-2">
-            {notes.data?.notifications.map((n) => (
-              <div key={n.id} className="flex items-center justify-between rounded-lg border border-gray-700/40 bg-gray-900/40 p-3">
-                <div>
-                  <p className="font-medium text-white">{n.title} <span className="text-xs text-gray-400">({n.type}, read by {n.readCount})</span></p>
-                  <p className="text-sm text-gray-300">{n.message}</p>
-                </div>
-                <div className="flex gap-2">
-                  {n.isActive && (
-                    <button onClick={() => noteAction.mutate({ id: n.id, method: "PATCH" })} className="rounded bg-orange-600/80 px-2 py-1 text-xs text-white hover:bg-orange-600">Deactivate</button>
-                  )}
-                  <button onClick={() => noteAction.mutate({ id: n.id, method: "DELETE" })} className="rounded bg-red-600/80 px-2 py-1 text-xs text-white hover:bg-red-600">Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+          {(notes.data?.notifications.length ?? 0) > 0 && (
+            <ul className="mt-6 divide-y divide-line border-t border-line">
+              {notes.data?.notifications.map((n) => (
+                <li key={n.id} className="flex items-start justify-between gap-4 py-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {n.title && <p className="text-ink">{n.title}</p>}
+                      <span className="label !text-ink-3">{n.type} · read {n.readCount}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-ink-2">{n.message}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {n.isActive && (
+                      <button onClick={() => noteAction.mutate({ id: n.id, method: "PATCH" })} className="rounded-md border border-line-strong px-2 py-1 text-xs text-ink-2 transition-colors hover:text-ink">Mute</button>
+                    )}
+                    <button onClick={() => noteAction.mutate({ id: n.id, method: "DELETE" })} className="rounded-md p-1.5 text-ink-3 transition-colors hover:text-alert"><X className="h-4 w-4" /></button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
       </main>
 
-      {confirmReset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-red-500/50 bg-gray-800 p-6 text-center">
-            <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-red-400" />
-            <h3 className="mb-2 text-lg font-bold text-white">Reset all teams?</h3>
-            <p className="mb-5 text-sm text-gray-300">This permanently deletes every team, their members, and game progress. Admin is preserved.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmReset(false)} className="flex-1 rounded-xl bg-gray-600 py-3 font-semibold text-white hover:bg-gray-700">Cancel</button>
-              <button onClick={() => reset.mutate()} disabled={reset.isPending} className="flex-1 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-                {reset.isPending ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Reset All"}
-              </button>
+      {/* Reset confirmation */}
+      <AnimatePresence>
+        {confirmReset && (
+          <Modal onClose={() => setConfirmReset(false)}>
+            <AlertTriangle className="mb-4 h-8 w-8 text-alert" />
+            <h3 className="font-serif text-3xl text-ink">Reset all units?</h3>
+            <p className="mt-3 text-sm text-ink-2">This permanently deletes every unit, their operatives, and game progress. Admin is preserved.</p>
+            <div className="mt-8 flex gap-3">
+              <Button variant="ghost" size="lg" className="flex-1" noMagnet onClick={() => setConfirmReset(false)}>Cancel</Button>
+              <Button variant="alert" size="lg" className="flex-1" noMagnet disabled={reset.isPending} onClick={() => reset.mutate()}>
+                {reset.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Reset All"}
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </Modal>
+        )}
+      </AnimatePresence>
 
-      {/* Stop game confirmation (password-gated) */}
-      {showStop && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-red-500/50 bg-gray-800 p-6 text-center">
-            <Square className="mx-auto mb-3 h-10 w-10 text-red-400" />
-            <h3 className="mb-2 text-lg font-bold text-white">Stop &amp; discard game?</h3>
-            <p className="mb-4 text-sm text-gray-300">This ends the running game for everyone and unlocks the dataset. Re-enter the admin password to confirm.</p>
-            <input
-              type="password"
-              value={stopPassword}
-              onChange={(e) => setStopPassword(e.target.value)}
-              placeholder="Admin password"
-              className="mb-4 w-full rounded-lg border border-gray-700/50 bg-gray-900/50 px-3 py-2.5 text-white focus:border-red-400 focus:outline-none"
-            />
-            <div className="flex gap-3">
-              <button onClick={() => { setShowStop(false); setStopPassword(""); }} className="flex-1 rounded-xl bg-gray-600 py-3 font-semibold text-white hover:bg-gray-700">Cancel</button>
-              <button onClick={() => stopGame.mutate(stopPassword)} disabled={stopGame.isPending || !stopPassword} className="flex-1 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-                {stopGame.isPending ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Stop Game"}
-              </button>
+      {/* Stop confirmation */}
+      <AnimatePresence>
+        {showStop && (
+          <Modal onClose={() => { setShowStop(false); setStopPassword(""); }}>
+            <Square className="mb-4 h-8 w-8 text-alert" />
+            <h3 className="font-serif text-3xl text-ink">Stop &amp; discard game?</h3>
+            <p className="mt-3 text-sm text-ink-2">This ends the running game for everyone and unlocks the dataset. Re-enter the admin password to confirm.</p>
+            <div className="mt-6">
+              <Input label="Admin Password" type="password" value={stopPassword} onChange={(e) => setStopPassword(e.target.value)} />
             </div>
-          </div>
-        </div>
-      )}
+            <div className="mt-8 flex gap-3">
+              <Button variant="ghost" size="lg" className="flex-1" noMagnet onClick={() => { setShowStop(false); setStopPassword(""); }}>Cancel</Button>
+              <Button variant="alert" size="lg" className="flex-1" noMagnet disabled={stopGame.isPending || !stopPassword} onClick={() => stopGame.mutate(stopPassword)}>
+                {stopGame.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Stop Game"}
+              </Button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 const statusStyles: Record<GameStatus, string> = {
-  IDLE: "text-gray-300",
-  SCHEDULED: "text-blue-300",
-  RUNNING: "text-green-300",
-  PAUSED: "text-orange-300",
-  ENDED: "text-red-300",
+  IDLE: "text-ink-3",
+  SCHEDULED: "text-ink-2",
+  RUNNING: "text-ok",
+  PAUSED: "text-signal",
+  ENDED: "text-alert",
 };
 
 function GameControl({
-  s, datasets, startTime, setStartTime, hours, setHours, minutes, setMinutes, input,
+  s, datasets, startTime, setStartTime, hours, setHours, minutes, setMinutes,
   onSelectDataset, onStart, onPauseToggle, onStop, starting, pausing,
 }: {
   s: AdminSettings;
@@ -351,7 +396,6 @@ function GameControl({
   startTime: string; setStartTime: (v: string) => void;
   hours: number; setHours: (v: number) => void;
   minutes: number; setMinutes: (v: number) => void;
-  input: string;
   onSelectDataset: (id: string | null) => void;
   onStart: () => void; onPauseToggle: () => void; onStop: () => void;
   starting: boolean; pausing: boolean;
@@ -360,88 +404,98 @@ function GameControl({
   const status = deriveStatus(s, now);
   const armed = s.isActive;
 
-  let timer: React.ReactNode = <span className="text-sm text-gray-400">No game scheduled</span>;
-  if (status === "SCHEDULED") timer = <Timer label="Starts in" value={fmtMs(new Date(s.startTime).getTime() - now)} />;
+  let timerLabel = "";
+  let timerValue = "";
+  if (status === "SCHEDULED") { timerLabel = "Starts in"; timerValue = fmtMs(new Date(s.startTime).getTime() - now); }
   else if (status === "RUNNING" || status === "PAUSED") {
     const activePause = s.isPaused && s.pausedAt ? now - new Date(s.pausedAt).getTime() : 0;
     const left = s.durationMs - (now - new Date(s.startTime).getTime() - (s.totalPauseMs + activePause));
-    timer = <Timer label={s.isPaused ? "Paused — time left" : "Ends in"} value={fmtMs(left)} />;
-  } else if (status === "ENDED") timer = <span className="text-lg font-bold text-red-300">Ended</span>;
+    timerLabel = s.isPaused ? "Paused — left" : "Ends in";
+    timerValue = fmtMs(left);
+  }
 
   return (
-    <>
-      <div className="mb-4 flex items-center justify-between rounded-xl border border-gray-700/50 bg-gray-900/40 p-4">
+    <div className="space-y-5">
+      {/* status row */}
+      <div className="flex items-center justify-between border-b border-line pb-4">
         <div>
-          <p className="text-xs uppercase tracking-wide text-gray-400">Status</p>
-          <p className={`text-lg font-bold ${statusStyles[status]}`}>{status}</p>
+          <span className="label block">Status</span>
+          <span className={cn("data mt-1 block text-2xl", statusStyles[status])}>{status}</span>
         </div>
-        {timer}
+        {timerValue && (
+          <div className="text-right">
+            <span className="label block">{timerLabel}</span>
+            <span className="data mt-1 block text-2xl tabular-nums text-ink">{timerValue}</span>
+          </div>
+        )}
+        {status === "ENDED" && <span className="data text-2xl text-alert">Ended</span>}
       </div>
 
       {!armed ? (
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Start time</label>
-            <input type="datetime-local" className={input} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        <div className="space-y-5">
+          <Input label="Start Time" type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Duration — Hours" type="number" min={0} max={23} value={hours} onChange={(e) => setHours(+e.target.value)} />
+            <Input label="Duration — Minutes" type="number" min={0} max={59} value={minutes} onChange={(e) => setMinutes(+e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Duration — hours</label>
-              <input type="number" min={0} max={23} className={input} value={hours} onChange={(e) => setHours(+e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Duration — minutes</label>
-              <input type="number" min={0} max={59} className={input} value={minutes} onChange={(e) => setMinutes(+e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">Challenge dataset</label>
-            <select className={input} value={s.selectedDatasetId ?? ""} onChange={(e) => onSelectDataset(e.target.value || null)}>
-              <option value="">— Select a dataset —</option>
-              {datasets.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.challengeCount})</option>)}
-            </select>
-          </div>
-          <button onClick={onStart} disabled={starting} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50">
-            <Play className="h-5 w-5" /> Start Game
-          </button>
-          <p className="text-xs text-gray-500">Use a start time of now (or earlier) to begin immediately, or a future time to schedule. Settings lock once the game starts.</p>
+          <Select
+            label="Challenge Dataset"
+            value={s.selectedDatasetId ?? ""}
+            onChange={(v) => onSelectDataset(v || null)}
+            options={datasets.map((d) => ({ value: d.id, label: `${d.name} (${d.challengeCount})` }))}
+            placeholder="Select a dataset"
+          />
+          <Button size="lg" noMagnet className="w-full" disabled={starting} onClick={onStart}>
+            {starting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /> Start Game</>}
+          </Button>
+          <p className="data text-xs leading-relaxed text-ink-3">
+            Use a start time of now (or earlier) to begin immediately, or a future time to schedule. Settings lock once the game starts.
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-gray-400">Dataset</dt><dd className="font-medium text-white">{s.selectedDatasetName ?? "—"}</dd></div>
-            <div><dt className="text-gray-400">Duration</dt><dd className="font-medium text-white">{Math.floor(s.durationMs / 3600000)}h {Math.round((s.durationMs % 3600000) / 60000)}m</dd></div>
-            <div className="col-span-2"><dt className="text-gray-400">Start</dt><dd className="font-medium text-white">{new Date(s.startTime).toLocaleString()}</dd></div>
+        <div className="space-y-5">
+          <dl className="grid grid-cols-2 gap-y-4">
+            <div><dt className="label">Dataset</dt><dd className="mt-1 text-ink">{s.selectedDatasetName ?? "—"}</dd></div>
+            <div><dt className="label">Duration</dt><dd className="data mt-1 text-ink">{Math.floor(s.durationMs / 3600000)}h {Math.round((s.durationMs % 3600000) / 60000)}m</dd></div>
+            <div className="col-span-2"><dt className="label">Start</dt><dd className="data mt-1 text-ink">{new Date(s.startTime).toLocaleString()}</dd></div>
           </dl>
           {(status === "RUNNING" || status === "PAUSED") && (
-            <button onClick={onPauseToggle} disabled={pausing} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white disabled:opacity-50 ${s.isPaused ? "bg-green-600 hover:bg-green-700" : "bg-orange-600 hover:bg-orange-700"}`}>
+            <Button size="lg" noMagnet className="w-full" variant={s.isPaused ? "primary" : "outline"} disabled={pausing} onClick={onPauseToggle}>
               {s.isPaused ? <><Play className="h-5 w-5" /> Resume</> : <><Pause className="h-5 w-5" /> Pause</>}
-            </button>
+            </Button>
           )}
-          <button onClick={onStop} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-700">
+          <Button size="lg" noMagnet className="w-full" variant="alert" onClick={onStop}>
             <Square className="h-5 w-5" /> Stop &amp; Discard Game
-          </button>
-          <p className="text-xs text-gray-500">Settings are locked while a game is armed. Stop the game to reconfigure or pick a different dataset.</p>
+          </Button>
+          <p className="data text-xs leading-relaxed text-ink-3">
+            Settings are locked while a game is armed. Stop the game to reconfigure or pick a different dataset.
+          </p>
         </div>
       )}
-    </>
-  );
-}
-
-function Timer({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <p className="flex items-center justify-end gap-1 text-xs uppercase tracking-wide text-gray-400"><Clock className="h-3 w-3" /> {label}</p>
-      <p className="font-mono text-lg font-bold text-white">{value}</p>
     </div>
   );
 }
 
-function StatBox({ label, value }: { label: string; value?: number }) {
+function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-700/50 bg-gray-800/40 p-4 text-center backdrop-blur-xl">
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-2xl font-bold text-white">{value ?? "—"}</p>
-    </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={settle}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-paper/80 px-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10 }}
+        transition={springHeavy}
+        className="w-full max-w-sm rounded-2xl border border-line-strong bg-paper-2 p-7 shadow-sheet"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
   );
 }
