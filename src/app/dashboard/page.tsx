@@ -250,7 +250,10 @@ export default function DashboardPage() {
                 <li key={i} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <span className="truncate text-ink">{m.name}</span>
-                    <a href={`tel:${m.mobile}`} className="data mt-0.5 block text-xs text-ink-3 transition-colors hover:text-signal">{m.mobile}</a>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3">
+                      <a href={`tel:${m.mobile}`} className="data text-xs text-ink-3 transition-colors hover:text-signal">{m.mobile}</a>
+                      {m.email && <a href={`mailto:${m.email}`} className="data truncate text-xs text-ink-3 transition-colors hover:text-signal">{m.email}</a>}
+                    </div>
                   </div>
                   <span className="data shrink-0 text-sm text-ink-2">{short(m.department)}</span>
                 </li>

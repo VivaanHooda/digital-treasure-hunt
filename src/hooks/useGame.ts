@@ -76,7 +76,7 @@ export type TeamData = {
   leaderName: string;
   leaderMobile: string;
   leaderDepartment: string;
-  members: { name: string; mobile: string; department: string }[];
+  members: { name: string; email: string | null; mobile: string; department: string }[];
 } | null;
 
 export function useTeam() {

@@ -155,7 +155,7 @@ export default function LoginPage() {
           <Panel label="Operational Briefing">
             <ul className="space-y-2.5">
               {[
-                "Field units of exactly four operatives",
+                "Field units register with their full roster",
                 "60-second cooldown between position checks",
                 "Two-hour operational window",
                 "Positions confirmed on-site by coordinate",

@@ -13,6 +13,7 @@ export async function getSettingsAdmin() {
   });
   if (!s) throw new ApiError(500, "Game settings missing", "NO_SETTINGS");
   return {
+    gameName: s.gameName,
     startTime: s.startTime.toISOString(),
     durationMs: s.durationMs,
     isPaused: s.isPaused,
@@ -24,20 +25,37 @@ export async function getSettingsAdmin() {
     skipPenalty: s.skipPenalty,
     cooldownMs: s.cooldownMs,
     maxSkips: s.maxSkips,
+    minTeamSize: s.minTeamSize,
+    maxTeamSize: s.maxTeamSize,
     updatedAt: s.updatedAt.toISOString(),
   };
 }
 
 /** Update live gameplay rules (skip penalty, cooldown, max skips). Editable any
  *  time, including mid-game — players' state reads these on every request. */
-export async function updateGameRules(input: { skipPenalty?: number; cooldownMs?: number; maxSkips?: number }) {
+export async function updateGameRules(input: {
+  skipPenalty?: number; cooldownMs?: number; maxSkips?: number;
+  minTeamSize?: number; maxTeamSize?: number;
+}) {
   const data: Record<string, number> = {};
   if (input.skipPenalty !== undefined) data.skipPenalty = input.skipPenalty;
   if (input.cooldownMs !== undefined) data.cooldownMs = input.cooldownMs;
   if (input.maxSkips !== undefined) data.maxSkips = input.maxSkips;
+  if (input.minTeamSize !== undefined) data.minTeamSize = input.minTeamSize;
+  if (input.maxTeamSize !== undefined) data.maxTeamSize = input.maxTeamSize;
   if (Object.keys(data).length === 0) return getSettingsAdmin();
+
+  // Validate the resulting team-size range (against current values for partial updates).
+  if (input.minTeamSize !== undefined || input.maxTeamSize !== undefined) {
+    const cur = await prisma.gameSettings.findUnique({ where: { id: "global" }, select: { minTeamSize: true, maxTeamSize: true } });
+    const min = input.minTeamSize ?? cur?.minTeamSize ?? 1;
+    const max = input.maxTeamSize ?? cur?.maxTeamSize ?? 1;
+    if (min < 1) throw new ApiError(400, "Minimum team size must be at least 1.", "BAD_RANGE");
+    if (max < min) throw new ApiError(400, "Maximum team size must be ≥ the minimum.", "BAD_RANGE");
+  }
+
   await prisma.gameSettings.update({ where: { id: "global" }, data });
-  // Tell every connected player to refetch (skip counts / penalty / cooldown change).
+  // Tell every connected player to refetch (rules / team sizes changed).
   await events.settings();
   return getSettingsAdmin();
 }
@@ -78,6 +96,7 @@ export async function updateSettings(input: {
 /** Arm a game with the given config. Starts immediately if startTime <= now,
  *  otherwise schedules it. Settings become locked until the game is stopped. */
 export async function startGame(input: {
+  name: string;
   startTime: string;
   durationMs: number;
   selectedDatasetId: string;
@@ -93,6 +112,7 @@ export async function startGame(input: {
     where: { id: "global" },
     data: {
       isActive: true,
+      gameName: input.name.trim(),
       startTime: new Date(input.startTime),
       durationMs: input.durationMs,
       selectedDatasetId: input.selectedDatasetId,
@@ -250,7 +270,7 @@ export async function getTeamsAdmin() {
       leaderDepartment: true,
       createdAt: true,
       user: { select: { email: true, gameState: { select: { score: true } } } },
-      members: { select: { name: true, mobile: true, department: true } },
+      members: { select: { name: true, email: true, mobile: true, department: true } },
     },
   });
   return teams.map((t) => ({
@@ -282,7 +302,7 @@ export async function buildAttendanceCsv(): Promise<string> {
   for (const t of teams) {
     lines.push([t.leaderName, t.teamName, t.leaderMobile, t.leaderDepartment, t.leaderEmail, t.score].map(csvField).join(","));
     for (const m of t.members) {
-      lines.push([m.name, t.teamName, m.mobile, m.department, "Nil", t.score].map(csvField).join(","));
+      lines.push([m.name, t.teamName, m.mobile, m.department, m.email || "Nil", t.score].map(csvField).join(","));
     }
   }
   return lines.join("\n");

@@ -6,6 +6,7 @@ const mobile = z.string().trim().min(7).max(20);
 
 const memberSchema = z.object({
   name: nonEmpty,
+  email: z.string().trim().toLowerCase().email().max(200),
   mobile,
   department: nonEmpty,
 });
@@ -17,8 +18,8 @@ export const registerSchema = z.object({
   leaderName: nonEmpty,
   leaderMobile: mobile,
   leaderDepartment: nonEmpty,
-  // Exactly 3 members (4 total including the leader).
-  members: z.array(memberSchema).length(3),
+  // Count range is enforced server-side against GameSettings (min/maxTeamSize).
+  members: z.array(memberSchema).max(15),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
@@ -39,6 +40,7 @@ export const pauseSchema = z.object({ paused: z.boolean() }).strict();
 
 export const startGameSchema = z
   .object({
+    name: z.string().trim().min(1).max(120),
     startTime: z.string().datetime(),
     durationMs: z.number().int().positive().max(86_400_000),
     selectedDatasetId: z.string().min(1),
@@ -119,6 +121,8 @@ export const gameRulesSchema = z.object({
   skipPenalty: z.number().int().min(0).max(100_000).optional(),
   cooldownMs: z.number().int().min(0).max(86_400_000).optional(), // 0s..24h
   maxSkips: z.number().int().min(0).max(1000).optional(),
+  minTeamSize: z.number().int().min(1).max(12).optional(),
+  maxTeamSize: z.number().int().min(1).max(12).optional(),
 });
 
 /** Parse `data` against `schema`, throwing a 400 ApiError on failure. */

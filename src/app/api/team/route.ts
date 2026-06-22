@@ -17,7 +17,7 @@ export async function GET() {
         leaderName: true,
         leaderMobile: true,
         leaderDepartment: true,
-        members: { select: { name: true, mobile: true, department: true } },
+        members: { select: { name: true, email: true, mobile: true, department: true } },
       },
     });
     return json({ team });

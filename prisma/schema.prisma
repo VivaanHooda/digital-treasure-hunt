@@ -58,10 +58,11 @@ model Team {
 }
 
 model TeamMember {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   teamId     String
-  team       Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team       Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   name       String
+  email      String? // required at registration; nullable for legacy rows
   mobile     String
   department String
 }
@@ -165,6 +166,8 @@ model Challenge {
 // Single global settings row (id = "global").
 model GameSettings {
   id              String   @id @default("global")
+  // Admin-given name for the current game (carried onto its archive).
+  gameName        String?
   startTime       DateTime
   durationMs      Int
   isPaused        Boolean  @default(false)

@@ -19,6 +19,7 @@ import { cn } from "@/lib/cn";
 import { springHeavy, settle } from "@/lib/motion";
 
 type AdminSettings = {
+  gameName: string | null;
   startTime: string;
   durationMs: number;
   isPaused: boolean;
@@ -30,6 +31,8 @@ type AdminSettings = {
   skipPenalty: number;
   cooldownMs: number;
   maxSkips: number;
+  minTeamSize: number;
+  maxTeamSize: number;
 };
 
 type GameStatus = "IDLE" | "SCHEDULED" | "RUNNING" | "PAUSED" | "ENDED";
@@ -113,7 +116,7 @@ export default function AdminPage() {
     onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
   });
   const startGame = useMutation({
-    mutationFn: (body: { startTime: string; durationMs: number; selectedDatasetId: string }) => apiSend("/api/admin/game/start", "POST", body),
+    mutationFn: (body: { name: string; startTime: string; durationMs: number; selectedDatasetId: string }) => apiSend("/api/admin/game/start", "POST", body),
     onSuccess: () => { invalidate(["adminSettings", "adminDatasets"]); flash(true, "Game started."); },
     onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
   });
@@ -124,6 +127,7 @@ export default function AdminPage() {
   });
 
   const [noteForm, setNoteForm] = useState({ title: "", message: "", type: "info" });
+  const [gameName, setGameName] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
@@ -137,20 +141,21 @@ export default function AdminPage() {
     onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
   });
   const saveRules = useMutation({
-    mutationFn: (body: { skipPenalty: number; cooldownMs: number; maxSkips: number }) => apiSend("/api/admin/rules", "PATCH", body),
+    mutationFn: (body: { skipPenalty: number; cooldownMs: number; maxSkips: number; minTeamSize: number; maxTeamSize: number }) => apiSend("/api/admin/rules", "PATCH", body),
     onSuccess: () => { invalidate(["adminSettings"]); flash(true, "Game rules updated."); },
     onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
   });
-  const [rulesForm, setRulesForm] = useState({ skipPenalty: 5, cooldownSec: 60, maxSkips: 3 });
+  const [rulesForm, setRulesForm] = useState({ skipPenalty: 5, cooldownSec: 60, maxSkips: 3, minTeamSize: 1, maxTeamSize: 4 });
 
   const s = settings.data;
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (s && !seeded) {
+      setGameName(s.gameName ?? "");
       setStartTime(toLocalInput(s.startTime));
       // Seed End from the projected wall-clock end (start + duration + pauses).
       setEndTime(toLocalInput(new Date(Date.parse(s.startTime) + s.durationMs + s.totalPauseMs).toISOString()));
-      setRulesForm({ skipPenalty: s.skipPenalty, cooldownSec: Math.round(s.cooldownMs / 1000), maxSkips: s.maxSkips });
+      setRulesForm({ skipPenalty: s.skipPenalty, cooldownSec: Math.round(s.cooldownMs / 1000), maxSkips: s.maxSkips, minTeamSize: s.minTeamSize, maxTeamSize: s.maxTeamSize });
       setSeeded(true);
     }
   }, [s, seeded]);
@@ -215,16 +220,19 @@ export default function AdminPage() {
               <GameControl
                 s={s}
                 datasets={datasets.data?.datasets ?? []}
+                gameName={gameName}
+                setGameName={setGameName}
                 startTime={startTime}
                 setStartTime={setStartTime}
                 endTime={endTime}
                 setEndTime={setEndTime}
                 onSelectDataset={(id) => saveSettings.mutate({ selectedDatasetId: id })}
                 onStart={() => {
+                  if (!gameName.trim()) { flash(false, "Name the game first."); return; }
                   if (!s.selectedDatasetId) { flash(false, "Select a dataset first."); return; }
                   const durationMs = new Date(endTime).getTime() - new Date(startTime).getTime();
                   if (!(durationMs > 0)) { flash(false, "End time must be after the start time."); return; }
-                  startGame.mutate({ startTime: new Date(startTime).toISOString(), durationMs, selectedDatasetId: s.selectedDatasetId });
+                  startGame.mutate({ name: gameName.trim(), startTime: new Date(startTime).toISOString(), durationMs, selectedDatasetId: s.selectedDatasetId });
                 }}
                 onAdjustEnd={() => {
                   const ms = new Date(endTime).getTime();
@@ -293,12 +301,32 @@ export default function AdminPage() {
             <Input label="Max Skips" type="number" min={0} value={rulesForm.maxSkips}
               onChange={(e) => setRulesForm({ ...rulesForm, maxSkips: Math.max(0, Math.floor(+e.target.value || 0)) })} />
           </div>
-          <div className="mt-5 flex items-center gap-4">
-            <Button size="md" noMagnet disabled={saveRules.isPending}
-              onClick={() => saveRules.mutate({ skipPenalty: rulesForm.skipPenalty, cooldownMs: rulesForm.cooldownSec * 1000, maxSkips: rulesForm.maxSkips })}>
+
+          <div className="mt-6 border-t border-line pt-5">
+            <div className="label mb-3">Team Grouping · total size incl. leader (set min = max for a fixed size)</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:max-w-sm">
+              <Input label="Min Team Size" type="number" min={1} max={12} value={rulesForm.minTeamSize}
+                onChange={(e) => setRulesForm({ ...rulesForm, minTeamSize: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+              <Input label="Max Team Size" type="number" min={1} max={12} value={rulesForm.maxTeamSize}
+                onChange={(e) => setRulesForm({ ...rulesForm, maxTeamSize: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+            </div>
+            {rulesForm.maxTeamSize < rulesForm.minTeamSize && (
+              <p className="mt-2 text-xs text-alert">Max team size must be ≥ minimum.</p>
+            )}
+          </div>
+
+          <div className="mt-6 flex items-center gap-4">
+            <Button size="md" noMagnet disabled={saveRules.isPending || rulesForm.maxTeamSize < rulesForm.minTeamSize}
+              onClick={() => saveRules.mutate({
+                skipPenalty: rulesForm.skipPenalty,
+                cooldownMs: rulesForm.cooldownSec * 1000,
+                maxSkips: rulesForm.maxSkips,
+                minTeamSize: rulesForm.minTeamSize,
+                maxTeamSize: rulesForm.maxTeamSize,
+              })}>
               {saveRules.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Rules"}
             </Button>
-            <p className="data text-xs leading-relaxed text-ink-3">Applied live — affects all players on their next action.</p>
+            <p className="data text-xs leading-relaxed text-ink-3">Applied live — affects new registrations and players on their next action.</p>
           </div>
         </Panel>
 
@@ -436,11 +464,12 @@ const statusStyles: Record<GameStatus, string> = {
 };
 
 function GameControl({
-  s, datasets, startTime, setStartTime, endTime, setEndTime,
+  s, datasets, gameName, setGameName, startTime, setStartTime, endTime, setEndTime,
   onSelectDataset, onStart, onAdjustEnd, onPauseToggle, onStop, starting, pausing, adjustingEnd,
 }: {
   s: AdminSettings;
   datasets: DatasetOption[];
+  gameName: string; setGameName: (v: string) => void;
   startTime: string; setStartTime: (v: string) => void;
   endTime: string; setEndTime: (v: string) => void;
   onSelectDataset: (id: string | null) => void;
@@ -480,6 +509,7 @@ function GameControl({
 
       {!armed ? (
         <div className="space-y-5">
+          <Input label="Game Name" value={gameName} onChange={(e) => setGameName(e.target.value)} placeholder="e.g. RVCE Treasure Hunt — Finals" />
           <TimeWindow start={startTime} end={endTime} onStartChange={setStartTime} onEndChange={setEndTime} />
           <Select
             label="Challenge Dataset"
@@ -498,6 +528,7 @@ function GameControl({
       ) : (
         <div className="space-y-5">
           <dl className="grid grid-cols-2 gap-y-4">
+            <div className="col-span-2"><dt className="label">Game</dt><dd className="mt-1 font-serif text-xl text-ink">{s.gameName ?? "—"}</dd></div>
             <div><dt className="label">Dataset</dt><dd className="mt-1 text-ink">{s.selectedDatasetName ?? "—"}</dd></div>
             <div><dt className="label">Duration</dt><dd className="data mt-1 text-ink">{Math.floor(s.durationMs / 3600000)}h {Math.round((s.durationMs % 3600000) / 60000)}m</dd></div>
             <div className="col-span-2"><dt className="label">Start</dt><dd className="data mt-1 text-ink">{new Date(s.startTime).toLocaleString()}</dd></div>

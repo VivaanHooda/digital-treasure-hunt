@@ -10,7 +10,7 @@ export type ArchiveTeamResult = {
   leaderEmail: string;
   leaderMobile: string;
   leaderDepartment: string;
-  members: { name: string; mobile: string; department: string }[];
+  members: { name: string; email: string | null; mobile: string; department: string }[];
   score: number;
   completedCount: number;
   skipsUsed: number;
@@ -49,7 +49,7 @@ export async function archiveCurrentGame(label?: string) {
               leaderName: true,
               leaderMobile: true,
               leaderDepartment: true,
-              members: { select: { name: true, mobile: true, department: true } },
+              members: { select: { name: true, email: true, mobile: true, department: true } },
             },
           },
         },
@@ -104,7 +104,8 @@ export async function archiveCurrentGame(label?: string) {
   const data: ArchiveTeamResult[] = rows.map((r, i) => ({ rank: i + 1, ...r }));
 
   const datasetName = settings?.selectedDataset?.name ?? "—";
-  const defaultLabel = `${datasetName} · ${new Date().toLocaleDateString("en-GB")}`;
+  // Default the archive label to the admin-given game name; fall back to dataset · date.
+  const defaultLabel = settings?.gameName?.trim() || `${datasetName} · ${new Date().toLocaleDateString("en-GB")}`;
 
   const archive = await prisma.gameArchive.create({
     data: {
@@ -175,7 +176,7 @@ export async function buildArchiveAttendanceCsv(id: string): Promise<{ csv: stri
   for (const t of archive.teams) {
     lines.push([t.leaderName, t.teamName, t.leaderMobile, t.leaderDepartment, t.leaderEmail, t.score].map(csvField).join(","));
     for (const m of t.members) {
-      lines.push([m.name, t.teamName, m.mobile, m.department, "Nil", t.score].map(csvField).join(","));
+      lines.push([m.name, t.teamName, m.mobile, m.department, m.email || "Nil", t.score].map(csvField).join(","));
     }
   }
   return { csv: lines.join("\n"), label: archive.label };

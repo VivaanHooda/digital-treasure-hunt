@@ -19,7 +19,7 @@ type Summary = {
 };
 type Team = {
   rank: number; teamName: string; leaderName: string; leaderEmail: string; leaderMobile: string;
-  leaderDepartment: string; members: { name: string; mobile: string; department: string }[];
+  leaderDepartment: string; members: { name: string; email: string | null; mobile: string; department: string }[];
   score: number; completedCount: number; skipsUsed: number; picturesCompleted: number;
   riddlesCompleted: number; total: number; finished: boolean; lastCompletedAt: string | null;
 };
@@ -154,7 +154,9 @@ export default function AdminArchivePage() {
                       {t.completedCount}/{t.total} solved · {t.picturesCompleted} pics · {t.riddlesCompleted} riddles · {t.skipsUsed} skips
                     </p>
                     {t.members.length > 0 && (
-                      <p className="data mt-1 text-xs text-ink-3">Members: {t.members.map((m) => m.name).join(", ")}</p>
+                      <p className="data mt-1 text-xs text-ink-3">
+                        Members: {t.members.map((m) => (m.email ? `${m.name} (${m.email})` : m.name)).join(", ")}
+                      </p>
                     )}
                   </div>
                   <div className="text-right"><div className="data text-xl tabular-nums text-ink">{t.score}</div><div className="label">pts</div></div>

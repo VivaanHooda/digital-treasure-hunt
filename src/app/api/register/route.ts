@@ -6,6 +6,18 @@ import { rateLimit, POLICIES } from "@/lib/rateLimit";
 import { parseOrThrow, registerSchema } from "@/lib/validation";
 import { shuffleChallengeIds } from "@/lib/challengeOrder";
 
+// Public: the register page reads the current team-size range to render slots.
+export async function GET(req: Request) {
+  return handle(async () => {
+    await rateLimit({ ...POLICIES.read, id: getClientIp(req) });
+    const s = await prisma.gameSettings.findUnique({
+      where: { id: "global" },
+      select: { minTeamSize: true, maxTeamSize: true },
+    });
+    return json({ minTeamSize: s?.minTeamSize ?? 4, maxTeamSize: s?.maxTeamSize ?? 4 });
+  });
+}
+
 export async function POST(req: Request) {
   return handle(async () => {
     assertSameOrigin(req);
@@ -21,6 +33,16 @@ export async function POST(req: Request) {
       return fail(409, "An account with that email already exists.", "EMAIL_TAKEN");
     }
 
+    // Emails + mobiles must be unique across the whole team (leader + members).
+    const emails = [input.email, ...input.members.map((m) => m.email)];
+    if (new Set(emails).size !== emails.length) {
+      return fail(409, "Each member needs a unique email address.", "DUP_EMAIL");
+    }
+    const mobiles = [input.leaderMobile, ...input.members.map((m) => m.mobile)];
+    if (new Set(mobiles).size !== mobiles.length) {
+      return fail(409, "Each member needs a unique mobile number.", "DUP_MOBILE");
+    }
+
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     // Freeze the dataset for this game from the current global selection, and
@@ -28,6 +50,15 @@ export async function POST(req: Request) {
     const settings = await prisma.gameSettings.findUnique({ where: { id: "global" } });
     if (!settings?.selectedDatasetId) {
       return fail(409, "No challenge dataset has been selected by the admin yet.", "NO_DATASET");
+    }
+
+    // Enforce the admin-configured team size (total includes the leader).
+    const total = input.members.length + 1;
+    if (total < settings.minTeamSize || total > settings.maxTeamSize) {
+      const range = settings.minTeamSize === settings.maxTeamSize
+        ? `exactly ${settings.minTeamSize}`
+        : `${settings.minTeamSize}–${settings.maxTeamSize}`;
+      return fail(409, `A team must have ${range} people (including the leader).`, "TEAM_SIZE");
     }
     const datasetId = settings.selectedDatasetId;
     const challenges = await prisma.challenge.findMany({
@@ -55,6 +86,7 @@ export async function POST(req: Request) {
                 members: {
                   create: input.members.map((m) => ({
                     name: m.name,
+                    email: m.email,
                     mobile: m.mobile,
                     department: m.department,
                   })),
