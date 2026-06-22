@@ -2,7 +2,8 @@ import { Prisma, type ChallengeType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api";
 import { events } from "@/lib/events";
-import { removeUpload } from "@/lib/uploads";
+import { removeUpload, readLocalImageAsBase64, saveUploadBuffer } from "@/lib/uploads";
+import { parseOrThrow, challengeCreateSchema, type DatasetImport } from "@/lib/validation";
 
 // ---- Lock / usage ---------------------------------------------------------
 
@@ -162,4 +163,107 @@ export async function deleteChallenge(id: string) {
   await prisma.challenge.delete({ where: { id } });
   await removeUpload(existing.imageUrl);
   return { ok: true };
+}
+
+// ---- Export / Import (portable, self-contained) ---------------------------
+
+export const DATASET_EXPORT_FORMAT = "treasure-hunt-dataset";
+
+/** A self-contained snapshot of a dataset incl. coordinates; local images are
+ *  embedded as base64 so the file can be imported on any deployment. */
+export async function exportDataset(id: string) {
+  const ds = await prisma.dataset.findUnique({
+    where: { id },
+    include: { challenges: { orderBy: { position: "asc" } } },
+  });
+  if (!ds) throw new ApiError(404, "Dataset not found.", "NOT_FOUND");
+
+  const challenges = await Promise.all(
+    ds.challenges.map(async (c) => {
+      const base = {
+        position: c.position,
+        type: c.type,
+        title: c.title,
+        description: c.description,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        marginOfError: c.marginOfError,
+        points: c.points,
+      };
+      // Local images (e.g. /images/... or /uploads/...) are embedded so the
+      // export is portable; external http(s) URLs are kept as-is.
+      if (c.imageUrl?.startsWith("/")) {
+        const image = await readLocalImageAsBase64(c.imageUrl);
+        return image ? { ...base, image } : { ...base, imageUrl: c.imageUrl };
+      }
+      return c.imageUrl ? { ...base, imageUrl: c.imageUrl } : base;
+    }),
+  );
+
+  return {
+    format: DATASET_EXPORT_FORMAT,
+    version: 1 as const,
+    name: ds.name,
+    exportedAt: new Date().toISOString(),
+    challengeCount: challenges.length,
+    challenges,
+  };
+}
+
+/** Pick a non-colliding dataset name (datasets.name is unique). */
+async function uniqueDatasetName(base: string): Promise<string> {
+  const existing = new Set(
+    (await prisma.dataset.findMany({ select: { name: true } })).map((d) => d.name),
+  );
+  if (!existing.has(base)) return base;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${base} (${i})`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${base} ${Date.now()}`;
+}
+
+/** Create a new dataset from an exported payload, materializing embedded images. */
+export async function importDataset(payload: DatasetImport) {
+  const name = await uniqueDatasetName((payload.name ?? "Imported Dataset").trim() || "Imported Dataset");
+
+  // Resolve images and validate every challenge BEFORE writing the dataset.
+  const prepared: ChallengeInput[] = [];
+  for (const c of payload.challenges) {
+    let imageUrl = c.imageUrl;
+    if (c.image) imageUrl = await saveUploadBuffer(Buffer.from(c.image.data, "base64"), c.image.mime);
+    const v = parseOrThrow(challengeCreateSchema, {
+      type: c.type,
+      title: c.title,
+      description: c.description,
+      imageUrl,
+      latitude: c.latitude,
+      longitude: c.longitude,
+      marginOfError: c.marginOfError,
+      points: c.points,
+    });
+    prepared.push(v);
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const dataset = await tx.dataset.create({ data: { name } });
+    await tx.challenge.createMany({
+      data: prepared.map((p, i) => ({
+        datasetId: dataset.id,
+        position: i,
+        type: p.type,
+        title: p.title,
+        description: p.description,
+        imageUrl: p.imageUrl ?? null,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        marginOfError: p.marginOfError,
+        points: p.points,
+      })),
+    });
+    return dataset;
+  });
+
+  await events.settings();
+  return { id: created.id, name, count: prepared.length };
 }

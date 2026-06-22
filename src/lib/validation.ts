@@ -92,6 +92,28 @@ export const challengeCreateSchema = challengeBase.refine(
 // Partial for edits; the final picture-needs-image invariant is checked in the service.
 export const challengeUpdateSchema = challengeBase.partial();
 
+// ---- Dataset export / import ----------------------------------------------
+
+const importedChallenge = z.object({
+  position: z.number().optional(),
+  type: z.enum(["PICTURE", "RIDDLE"]),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(2000),
+  // External URL kept as-is; local images travel embedded under `image`.
+  imageUrl: z.string().trim().max(2000).optional(),
+  image: z.object({ mime: z.string().min(1), data: z.string().min(1) }).optional(),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  marginOfError: z.number().int().positive().max(100_000),
+  points: z.number().int().positive().max(100_000),
+});
+
+export const datasetImportSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  challenges: z.array(importedChallenge).min(1).max(1000),
+});
+export type DatasetImport = z.infer<typeof datasetImportSchema>;
+
 /** Parse `data` against `schema`, throwing a 400 ApiError on failure. */
 export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   const result = schema.safeParse(data);

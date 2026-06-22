@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus, Trash2, Pencil, Lock, ChevronLeft, ChevronRight, Image as ImageIcon, ScrollText,
-  Upload, Link as LinkIcon, Loader2, Save,
+  Upload, Link as LinkIcon, Loader2, Save, Download, FileUp,
 } from "lucide-react";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
 import { Panel } from "@/components/ui/Panel";
@@ -97,6 +97,25 @@ export function DatasetsManager() {
     onError: onErr,
   });
 
+  const [importing, setImporting] = useState(false);
+  const onImportFile = async (file?: File) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/admin/datasets/import", { method: "POST", body: fd, credentials: "include" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "Import failed");
+      refetchDatasets();
+      flash(true, `Imported “${data.name}” · ${data.count} challenges`);
+    } catch (e) {
+      onErr(e);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const managed = datasets.data?.datasets.find((d) => d.id === manageId) ?? null;
 
   if (manageId && managed) {
@@ -107,13 +126,31 @@ export function DatasetsManager() {
     <Panel label="Challenge Datasets" bodyClassName="p-4">
       <Flash msg={msg} />
 
-      <div className="mb-5 flex items-end gap-3">
+      <div className="mb-4 flex items-end gap-3">
         <div className="flex-1">
           <Input label="New Dataset" value={newName} onChange={(e) => setNewName(e.target.value)} />
         </div>
         <Button noMagnet disabled={createDs.isPending || !newName.trim()} onClick={() => newName.trim() && createDs.mutate(newName.trim())}>
           <Plus className="h-4 w-4" /> Create
         </Button>
+      </div>
+
+      {/* Import a portable .thds.json export from any deployment */}
+      <div className="mb-5 flex items-center justify-between gap-3 border-b border-line pb-5">
+        <p className="data text-xs text-ink-3">Move datasets between deployments — export below, or import a file.</p>
+        <label className={cn(
+          "flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-2 transition-colors hover:border-ink-3 hover:text-ink",
+          importing && "pointer-events-none opacity-50",
+        )}>
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+          {importing ? "Importing…" : "Import dataset"}
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => { onImportFile(e.target.files?.[0]); e.currentTarget.value = ""; }}
+          />
+        </label>
       </div>
 
       <ul className="divide-y divide-line border-t border-line">
@@ -130,6 +167,12 @@ export function DatasetsManager() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button size="sm" variant="outline" noMagnet onClick={() => setManageId(d.id)}>Manage</Button>
+              <a
+                href={`/api/admin/datasets/${d.id}/export`}
+                download
+                title="Export (.json)"
+                className="rounded-md p-2 text-ink-3 transition-colors hover:text-signal"
+              ><Download className="h-4 w-4" /></a>
               <button
                 onClick={() => { const n = prompt("Rename dataset", d.name); if (n && n.trim()) renameDs.mutate({ id: d.id, name: n.trim() }); }}
                 disabled={d.locked}
