@@ -14,6 +14,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
+import { TimeWindow } from "@/components/ui/TimeWindow";
 import { cn } from "@/lib/cn";
 import { springHeavy, settle } from "@/lib/motion";
 
@@ -26,6 +27,9 @@ type AdminSettings = {
   isActive: boolean;
   selectedDatasetId: string | null;
   selectedDatasetName: string | null;
+  skipPenalty: number;
+  cooldownMs: number;
+  maxSkips: number;
 };
 
 type GameStatus = "IDLE" | "SCHEDULED" | "RUNNING" | "PAUSED" | "ENDED";
@@ -121,20 +125,32 @@ export default function AdminPage() {
 
   const [noteForm, setNoteForm] = useState({ title: "", message: "", type: "info" });
   const [startTime, setStartTime] = useState("");
-  const [hours, setHours] = useState(2);
-  const [minutes, setMinutes] = useState(0);
+  const [endTime, setEndTime] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
   const [showStop, setShowStop] = useState(false);
   const [stopPassword, setStopPassword] = useState("");
+
+  const adjustEnd = useMutation({
+    mutationFn: (iso: string) => apiSend("/api/admin/game/end-time", "POST", { endTime: iso }),
+    onSuccess: () => { invalidate(["adminSettings"]); flash(true, "End time updated."); },
+    onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
+  });
+  const saveRules = useMutation({
+    mutationFn: (body: { skipPenalty: number; cooldownMs: number; maxSkips: number }) => apiSend("/api/admin/rules", "PATCH", body),
+    onSuccess: () => { invalidate(["adminSettings"]); flash(true, "Game rules updated."); },
+    onError: (e) => flash(false, e instanceof ClientError ? e.message : "Failed."),
+  });
+  const [rulesForm, setRulesForm] = useState({ skipPenalty: 5, cooldownSec: 60, maxSkips: 3 });
 
   const s = settings.data;
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (s && !seeded) {
       setStartTime(toLocalInput(s.startTime));
-      setHours(Math.floor(s.durationMs / 3600000));
-      setMinutes(Math.round((s.durationMs % 3600000) / 60000));
+      // Seed End from the projected wall-clock end (start + duration + pauses).
+      setEndTime(toLocalInput(new Date(Date.parse(s.startTime) + s.durationMs + s.totalPauseMs).toISOString()));
+      setRulesForm({ skipPenalty: s.skipPenalty, cooldownSec: Math.round(s.cooldownMs / 1000), maxSkips: s.maxSkips });
       setSeeded(true);
     }
   }, [s, seeded]);
@@ -201,19 +217,25 @@ export default function AdminPage() {
                 datasets={datasets.data?.datasets ?? []}
                 startTime={startTime}
                 setStartTime={setStartTime}
-                hours={hours}
-                setHours={setHours}
-                minutes={minutes}
-                setMinutes={setMinutes}
+                endTime={endTime}
+                setEndTime={setEndTime}
                 onSelectDataset={(id) => saveSettings.mutate({ selectedDatasetId: id })}
                 onStart={() => {
                   if (!s.selectedDatasetId) { flash(false, "Select a dataset first."); return; }
-                  startGame.mutate({ startTime: new Date(startTime).toISOString(), durationMs: (hours * 3600 + minutes * 60) * 1000, selectedDatasetId: s.selectedDatasetId });
+                  const durationMs = new Date(endTime).getTime() - new Date(startTime).getTime();
+                  if (!(durationMs > 0)) { flash(false, "End time must be after the start time."); return; }
+                  startGame.mutate({ startTime: new Date(startTime).toISOString(), durationMs, selectedDatasetId: s.selectedDatasetId });
+                }}
+                onAdjustEnd={() => {
+                  const ms = new Date(endTime).getTime();
+                  if (Number.isNaN(ms)) { flash(false, "Pick a valid end time."); return; }
+                  adjustEnd.mutate(new Date(endTime).toISOString());
                 }}
                 onPauseToggle={() => pause.mutate(!s.isPaused)}
                 onStop={() => setShowStop(true)}
                 starting={startGame.isPending}
                 pausing={pause.isPending}
+                adjustingEnd={adjustEnd.isPending}
               />
             )}
           </Panel>
@@ -225,6 +247,13 @@ export default function AdminPage() {
               className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
             >
               <span>Manage Challenge Datasets</span>
+              <ChevronRight className="h-4 w-4 text-signal" />
+            </Link>
+            <Link
+              href="/admin/archive"
+              className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
+            >
+              <span>Game Archive</span>
               <ChevronRight className="h-4 w-4 text-signal" />
             </Link>
             <a
@@ -253,6 +282,25 @@ export default function AdminPage() {
             </p>
           </Panel>
         </div>
+
+        {/* Game Rules — tunable live */}
+        <Panel label="Game Rules">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-3">
+            <Input label="Skip Penalty (points)" type="number" min={0} value={rulesForm.skipPenalty}
+              onChange={(e) => setRulesForm({ ...rulesForm, skipPenalty: Math.max(0, Math.floor(+e.target.value || 0)) })} />
+            <Input label="Cooldown (seconds)" type="number" min={0} value={rulesForm.cooldownSec}
+              onChange={(e) => setRulesForm({ ...rulesForm, cooldownSec: Math.max(0, Math.floor(+e.target.value || 0)) })} />
+            <Input label="Max Skips" type="number" min={0} value={rulesForm.maxSkips}
+              onChange={(e) => setRulesForm({ ...rulesForm, maxSkips: Math.max(0, Math.floor(+e.target.value || 0)) })} />
+          </div>
+          <div className="mt-5 flex items-center gap-4">
+            <Button size="md" noMagnet disabled={saveRules.isPending}
+              onClick={() => saveRules.mutate({ skipPenalty: rulesForm.skipPenalty, cooldownMs: rulesForm.cooldownSec * 1000, maxSkips: rulesForm.maxSkips })}>
+              {saveRules.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Rules"}
+            </Button>
+            <p className="data text-xs leading-relaxed text-ink-3">Applied live — affects all players on their next action.</p>
+          </div>
+        </Panel>
 
         {/* Teams list */}
         <AnimatePresence>
@@ -388,17 +436,16 @@ const statusStyles: Record<GameStatus, string> = {
 };
 
 function GameControl({
-  s, datasets, startTime, setStartTime, hours, setHours, minutes, setMinutes,
-  onSelectDataset, onStart, onPauseToggle, onStop, starting, pausing,
+  s, datasets, startTime, setStartTime, endTime, setEndTime,
+  onSelectDataset, onStart, onAdjustEnd, onPauseToggle, onStop, starting, pausing, adjustingEnd,
 }: {
   s: AdminSettings;
   datasets: DatasetOption[];
   startTime: string; setStartTime: (v: string) => void;
-  hours: number; setHours: (v: number) => void;
-  minutes: number; setMinutes: (v: number) => void;
+  endTime: string; setEndTime: (v: string) => void;
   onSelectDataset: (id: string | null) => void;
-  onStart: () => void; onPauseToggle: () => void; onStop: () => void;
-  starting: boolean; pausing: boolean;
+  onStart: () => void; onAdjustEnd: () => void; onPauseToggle: () => void; onStop: () => void;
+  starting: boolean; pausing: boolean; adjustingEnd: boolean;
 }) {
   const now = Date.now();
   const status = deriveStatus(s, now);
@@ -433,11 +480,7 @@ function GameControl({
 
       {!armed ? (
         <div className="space-y-5">
-          <Input label="Start Time" type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Duration — Hours" type="number" min={0} max={23} value={hours} onChange={(e) => setHours(+e.target.value)} />
-            <Input label="Duration — Minutes" type="number" min={0} max={59} value={minutes} onChange={(e) => setMinutes(+e.target.value)} />
-          </div>
+          <TimeWindow start={startTime} end={endTime} onStartChange={setStartTime} onEndChange={setEndTime} />
           <Select
             label="Challenge Dataset"
             value={s.selectedDatasetId ?? ""}
@@ -459,6 +502,24 @@ function GameControl({
             <div><dt className="label">Duration</dt><dd className="data mt-1 text-ink">{Math.floor(s.durationMs / 3600000)}h {Math.round((s.durationMs % 3600000) / 60000)}m</dd></div>
             <div className="col-span-2"><dt className="label">Start</dt><dd className="data mt-1 text-ink">{new Date(s.startTime).toLocaleString()}</dd></div>
           </dl>
+
+          {/* Adjust end time mid-game (start locked). Disabled while paused. */}
+          <div>
+            <div className="label mb-2">Adjust End Time</div>
+            <TimeWindow start={startTime} end={endTime} onEndChange={setEndTime} lockStart />
+            <Button
+              size="md"
+              noMagnet
+              variant="outline"
+              className="mt-3 w-full"
+              disabled={adjustingEnd || s.isPaused}
+              onClick={onAdjustEnd}
+            >
+              {adjustingEnd ? <Loader2 className="h-5 w-5 animate-spin" /> : "Update End Time"}
+            </Button>
+            {s.isPaused && <p className="data mt-2 text-xs text-ink-3">Resume the game to change its end time.</p>}
+          </div>
+
           {(status === "RUNNING" || status === "PAUSED") && (
             <Button size="lg" noMagnet className="w-full" variant={s.isPaused ? "primary" : "outline"} disabled={pausing} onClick={onPauseToggle}>
               {s.isPaused ? <><Play className="h-5 w-5" /> Resume</> : <><Pause className="h-5 w-5" /> Pause</>}
@@ -468,7 +529,7 @@ function GameControl({
             <Square className="h-5 w-5" /> Stop &amp; Discard Game
           </Button>
           <p className="data text-xs leading-relaxed text-ink-3">
-            Settings are locked while a game is armed. Stop the game to reconfigure or pick a different dataset.
+            The end time can be changed live. Other settings are locked while a game is armed — stop the game to reconfigure or pick a different dataset.
           </p>
         </div>
       )}

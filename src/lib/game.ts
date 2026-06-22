@@ -4,7 +4,7 @@ import { ApiError } from "@/lib/api";
 import { events } from "@/lib/events";
 import { computeTime } from "@/lib/time";
 import { haversineMeters, round2 } from "@/lib/geo";
-import { COOLDOWN_MS, SKIP_PENALTY, MAX_SKIPS, MAX_ACCURACY_MULTIPLIER } from "@/lib/config";
+import { MAX_ACCURACY_MULTIPLIER } from "@/lib/config";
 
 // ---------------------------------------------------------------------------
 // Settings + time
@@ -111,9 +111,9 @@ export async function getGameStateForUser(userId: string) {
       completedCount: completions.length,
       skippedCount,
       skipsUsed: gs.skipsUsed,
-      remainingSkips: Math.max(0, MAX_SKIPS - gs.skipsUsed),
-      maxSkips: MAX_SKIPS,
-      skipPenalty: SKIP_PENALTY,
+      remainingSkips: Math.max(0, settings.maxSkips - gs.skipsUsed),
+      maxSkips: settings.maxSkips,
+      skipPenalty: settings.skipPenalty,
       picturesCompleted: pictures,
       riddlesCompleted: riddles,
       pictureTotal,
@@ -218,7 +218,7 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
         };
       }
 
-      const cooldownEndsAt = new Date(now + COOLDOWN_MS);
+      const cooldownEndsAt = new Date(now + settings.cooldownMs);
       await tx.gameState.update({
         where: { id: gs.id },
         data: { cooldownEndsAt, lastActivityAt: new Date() },
@@ -228,7 +228,7 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
         distance,
         marginOfError: challenge.marginOfError,
         isComplete: false,
-        cooldownRemaining: Math.ceil(COOLDOWN_MS / 1000),
+        cooldownRemaining: Math.ceil(settings.cooldownMs / 1000),
       };
     });
   } catch (e) {
@@ -260,19 +260,19 @@ export async function skipChallenge(userId: string) {
       if (gs.isComplete || gs.currentIndex >= total) {
         throw new ApiError(409, "The game is already complete.", "COMPLETE");
       }
-      if (gs.skipsUsed >= MAX_SKIPS) {
-        throw new ApiError(403, `No skips remaining (max ${MAX_SKIPS}).`, "NO_SKIPS");
+      if (gs.skipsUsed >= settings.maxSkips) {
+        throw new ApiError(403, `No skips remaining (max ${settings.maxSkips}).`, "NO_SKIPS");
       }
 
       const challengeId = gs.challengeIds[gs.currentIndex];
-      await tx.skip.create({ data: { gameStateId: gs.id, challengeId, penalty: SKIP_PENALTY } });
+      await tx.skip.create({ data: { gameStateId: gs.id, challengeId, penalty: settings.skipPenalty } });
 
       const nextIndex = gs.currentIndex + 1;
       const isComplete = nextIndex >= total;
       await tx.gameState.update({
         where: { id: gs.id },
         data: {
-          score: Math.max(0, gs.score - SKIP_PENALTY),
+          score: Math.max(0, gs.score - settings.skipPenalty),
           skipsUsed: { increment: 1 },
           currentIndex: nextIndex,
           cooldownEndsAt: null,
@@ -283,8 +283,8 @@ export async function skipChallenge(userId: string) {
       return {
         skipped: true,
         isComplete,
-        penalty: SKIP_PENALTY,
-        remainingSkips: Math.max(0, MAX_SKIPS - (gs.skipsUsed + 1)),
+        penalty: settings.skipPenalty,
+        remainingSkips: Math.max(0, settings.maxSkips - (gs.skipsUsed + 1)),
       };
     });
   } catch (e) {

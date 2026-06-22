@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { events } from "@/lib/events";
 import { ApiError } from "@/lib/api";
 import { ADMIN_ID } from "@/lib/config";
+import { archiveCurrentGame } from "@/lib/archive";
 
 // ---- Settings -------------------------------------------------------------
 
@@ -20,8 +21,25 @@ export async function getSettingsAdmin() {
     isActive: s.isActive,
     selectedDatasetId: s.selectedDatasetId,
     selectedDatasetName: s.selectedDataset?.name ?? null,
+    skipPenalty: s.skipPenalty,
+    cooldownMs: s.cooldownMs,
+    maxSkips: s.maxSkips,
     updatedAt: s.updatedAt.toISOString(),
   };
+}
+
+/** Update live gameplay rules (skip penalty, cooldown, max skips). Editable any
+ *  time, including mid-game — players' state reads these on every request. */
+export async function updateGameRules(input: { skipPenalty?: number; cooldownMs?: number; maxSkips?: number }) {
+  const data: Record<string, number> = {};
+  if (input.skipPenalty !== undefined) data.skipPenalty = input.skipPenalty;
+  if (input.cooldownMs !== undefined) data.cooldownMs = input.cooldownMs;
+  if (input.maxSkips !== undefined) data.maxSkips = input.maxSkips;
+  if (Object.keys(data).length === 0) return getSettingsAdmin();
+  await prisma.gameSettings.update({ where: { id: "global" }, data });
+  // Tell every connected player to refetch (skip counts / penalty / cooldown change).
+  await events.settings();
+  return getSettingsAdmin();
 }
 
 export async function updateSettings(input: {
@@ -94,6 +112,15 @@ export async function stopGame(password: string) {
   if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
     throw new ApiError(403, "Incorrect admin password.", "BAD_PASSWORD");
   }
+  // Preserve the final standings before the game is discarded (best-effort:
+  // never block a stop because archiving failed).
+  if ((await prisma.gameState.count()) > 0) {
+    try {
+      await archiveCurrentGame();
+    } catch (e) {
+      console.error("Auto-archive on stop failed:", e);
+    }
+  }
   await prisma.$transaction([
     prisma.gameState.updateMany({ where: { isComplete: false }, data: { isComplete: true } }),
     prisma.gameSettings.update({
@@ -103,6 +130,28 @@ export async function stopGame(password: string) {
   ]);
   await events.settings();
   await events.leaderboard();
+  return getSettingsAdmin();
+}
+
+/** Adjust the END time of a live (or scheduled) game — recomputes durationMs so
+ *  the game ends at the chosen wall-clock time. Editable mid-game; the start is
+ *  never moved. Disallowed while paused (resume first) to keep pause accounting
+ *  unambiguous. */
+export async function adjustEndTime(endTimeIso: string) {
+  const s = await prisma.gameSettings.findUnique({ where: { id: "global" } });
+  if (!s) throw new ApiError(500, "Game settings missing", "NO_SETTINGS");
+  if (!s.isActive) throw new ApiError(409, "No active game to adjust.", "NO_GAME");
+  if (s.isPaused) throw new ApiError(409, "Resume the game before changing its end time.", "PAUSED");
+
+  const end = new Date(endTimeIso).getTime();
+  if (Number.isNaN(end)) throw new ApiError(400, "Invalid end time.", "BAD_TIME");
+  const start = s.startTime.getTime();
+  // Projected end = start + durationMs + totalPauseMs, so solve for durationMs.
+  const durationMs = end - start - s.totalPauseMs;
+  if (durationMs <= 0) throw new ApiError(400, "End time must be after the start time.", "BAD_TIME");
+
+  await prisma.gameSettings.update({ where: { id: "global" }, data: { durationMs } });
+  await events.settings();
   return getSettingsAdmin();
 }
 

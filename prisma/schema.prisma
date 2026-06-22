@@ -176,6 +176,10 @@ model GameSettings {
   selectedDataset   Dataset? @relation(fields: [selectedDatasetId], references: [id], onDelete: SetNull)
   maxTeamSize     Int      @default(4)
   minTeamSize     Int      @default(3)
+  // Admin-tunable gameplay rules (applied live).
+  skipPenalty     Int      @default(5)
+  cooldownMs      Int      @default(60000)
+  maxSkips        Int      @default(3)
   updatedAt       DateTime @updatedAt
 }
 
@@ -204,4 +208,22 @@ model NotificationRead {
   readAt         DateTime     @default(now())
 
   @@unique([notificationId, userId])
+}
+
+// A frozen snapshot of a finished/stopped game: its config + full final
+// standings (one self-contained record that survives team resets). `data`
+// holds the per-team results array (see lib/archive.ts).
+model GameArchive {
+  id            String   @id @default(cuid())
+  label         String
+  datasetName   String
+  startTime     DateTime
+  durationMs    Int
+  teamCount     Int
+  topScore      Int
+  finishedCount Int      @default(0)
+  archivedAt    DateTime @default(now())
+  data          Json
+
+  @@index([archivedAt])
 }

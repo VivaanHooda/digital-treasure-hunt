@@ -66,7 +66,8 @@ async function main() {
   console.log(`Seeded datasets: Set A (${raw.A.length}), Set B (${raw.B.length}).`);
 
   // 2. Global game settings singleton (default selection = Set A).
-  const durationMs = Number(process.env.GAME_DEFAULT_DURATION_MS ?? 7200000);
+  // Placeholder duration; the admin sets the real window when starting a game.
+  const durationMs = 2 * 60 * 60 * 1000; // 2h
   await prisma.gameSettings.upsert({
     where: { id: "global" },
     create: {

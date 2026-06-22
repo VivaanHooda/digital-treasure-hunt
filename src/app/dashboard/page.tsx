@@ -137,10 +137,22 @@ export default function DashboardPage() {
   const pct = game.total ? Math.round((game.completedCount / game.total) * 100) : 0;
   const processed = Math.max(0, game.currentNumber - 1);
   const pending = timeUntilStart > 0;
-  const missionTitle = game.isComplete ? "All Files Declassified" : pending ? "Standby for Briefing" : challenge?.title ?? "Awaiting Assignment";
+  // A team is genuinely finished only if they processed every file — not just
+  // because the game was force-stopped (which flags isComplete to end play).
+  const playedThrough = game.total > 0 && game.completedCount + game.skippedCount >= game.total;
+  const ended = !active; // stopped/disarmed by command
+  const missionTitle = pending
+    ? "Standby for Briefing"
+    : playedThrough
+      ? "All Files Declassified"
+      : ended
+        ? "Operation Ended"
+        : settings.isPaused
+          ? "Operation Held"
+          : challenge?.title ?? "Awaiting Assignment";
 
   const logEntries: { n: number; state: "active" | "declassified" }[] = [];
-  if (!game.isComplete && active && !pending && challenge) logEntries.push({ n: game.currentNumber, state: "active" });
+  if (!game.isComplete && active && !settings.isPaused && !pending && challenge) logEntries.push({ n: game.currentNumber, state: "active" });
   for (let n = processed; n >= 1; n--) logEntries.push({ n, state: "declassified" });
   const visibleLog = showAllLog ? logEntries : logEntries.slice(0, 3);
 
@@ -159,7 +171,7 @@ export default function DashboardPage() {
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
                 <span className="font-serif text-[20vw] leading-[0.8] tracking-tight text-ink sm:text-[8rem]">
-                  {pending || game.isComplete ? "—" : pad2(game.currentNumber)}
+                  {pending || ended || playedThrough ? "—" : pad2(game.currentNumber)}
                 </span>
                 <span className="label pb-3">Mission</span>
               </div>

@@ -114,6 +114,13 @@ export const datasetImportSchema = z.object({
 });
 export type DatasetImport = z.infer<typeof datasetImportSchema>;
 
+// ---- Live gameplay rules (admin) ------------------------------------------
+export const gameRulesSchema = z.object({
+  skipPenalty: z.number().int().min(0).max(100_000).optional(),
+  cooldownMs: z.number().int().min(0).max(86_400_000).optional(), // 0s..24h
+  maxSkips: z.number().int().min(0).max(1000).optional(),
+});
+
 /** Parse `data` against `schema`, throwing a 400 ApiError on failure. */
 export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   const result = schema.safeParse(data);
