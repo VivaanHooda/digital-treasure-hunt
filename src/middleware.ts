@@ -9,5 +9,5 @@ export default auth;
 
 export const config = {
   // Run on app routes, skip Next internals, the auth API, and static assets.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|images|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|images|uploads|.*\\.png$|.*\\.jpg$|.*\\.webp$|.*\\.svg$).*)"],
 };

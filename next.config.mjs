@@ -37,6 +37,13 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async rewrites() {
+    // Runtime-uploaded images aren't served by Next's static handler (it only
+    // serves files present at startup). Route stored `/uploads/...` URLs to a
+    // handler that reads from disk. Runs after the filesystem check, so any
+    // build-time public assets still win.
+    return [{ source: "/uploads/:path*", destination: "/api/uploads/:path*" }];
+  },
 };
 
 export default nextConfig;
