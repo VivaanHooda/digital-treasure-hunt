@@ -8,7 +8,6 @@ import {
   Pause, Play, Square, Send, Download, Trash2, AlertTriangle, Loader2, LogOut, X, ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
-import { useEventStream } from "@/hooks/useEventStream";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
 import { Panel } from "@/components/ui/Panel";
 import { Input } from "@/components/ui/Input";
@@ -61,6 +60,12 @@ type AdminTeam = {
 type AdminNote = {
   id: string; title: string; message: string; type: string; isActive: boolean; readCount: number; createdAt: string;
 };
+type StandingRow = {
+  rank: number; teamName: string; score: number; completedCount: number; total: number; isComplete: boolean; lastCompletedAt: string | null;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const isLive = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 300000;
 
 const toLocalInput = (iso: string) => {
   const d = new Date(iso);
@@ -69,7 +74,6 @@ const toLocalInput = (iso: string) => {
 };
 
 export default function AdminPage() {
-  useEventStream(true);
   const [, forceTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => forceTick((x) => x + 1), 1000);
@@ -87,6 +91,8 @@ export default function AdminPage() {
   const stats = useQuery({ queryKey: ["adminStats"], queryFn: () => apiGet<Stats>("/api/admin/stats") });
   const teams = useQuery({ queryKey: ["adminTeams"], queryFn: () => apiGet<{ teams: AdminTeam[] }>("/api/admin/teams") });
   const notes = useQuery({ queryKey: ["adminNotes"], queryFn: () => apiGet<{ notifications: AdminNote[] }>("/api/admin/notifications") });
+  // Shares the "leaderboard" query key so the global SSE stream refreshes it live.
+  const standings = useQuery({ queryKey: ["leaderboard"], queryFn: () => apiGet<{ entries: StandingRow[] }>("/api/leaderboard") });
 
   const invalidate = (keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 
@@ -132,8 +138,10 @@ export default function AdminPage() {
   const [endTime, setEndTime] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
+  const [showStandings, setShowStandings] = useState(false);
   const [showStop, setShowStop] = useState(false);
   const [stopPassword, setStopPassword] = useState("");
+  const [showLogout, setShowLogout] = useState(false);
 
   const adjustEnd = useMutation({
     mutationFn: (iso: string) => apiSend("/api/admin/game/end-time", "POST", { endTime: iso }),
@@ -171,7 +179,7 @@ export default function AdminPage() {
             <span className="font-serif text-xl text-ink">Control</span>
           </div>
           <button
-            onClick={() => signOut({ redirectTo: "/login" })}
+            onClick={() => setShowLogout(true)}
             className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-2 transition-colors hover:border-alert/50 hover:text-alert"
           >
             <LogOut className="h-4 w-4" /> Sign out
@@ -272,6 +280,13 @@ export default function AdminPage() {
               <Download className="h-4 w-4 text-signal" />
             </a>
             <button
+              onClick={() => setShowStandings((v) => !v)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
+            >
+              <span>{showStandings ? "Hide" : "View"} Live Standings</span>
+              <span className="data text-sm text-ink-2">{standings.data?.entries.length ?? 0}</span>
+            </button>
+            <button
               onClick={() => setShowTeams((v) => !v)}
               className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-paper-1 px-4 py-3.5 text-ink transition-colors hover:border-signal/50 hover:bg-paper-2"
             >
@@ -329,6 +344,43 @@ export default function AdminPage() {
             <p className="data text-xs leading-relaxed text-ink-3">Applied live — affects new registrations and players on their next action.</p>
           </div>
         </Panel>
+
+        {/* Live standings */}
+        <AnimatePresence>
+          {showStandings && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={settle} className="overflow-hidden">
+              <Panel label="Live Standings" bodyClassName="p-0">
+                {standings.isLoading ? (
+                  <p className="label py-6 text-center">Compiling…</p>
+                ) : (standings.data?.entries.length ?? 0) === 0 ? (
+                  <p className="label px-4 py-6 text-center">No scores logged yet</p>
+                ) : (
+                  <ul className="divide-y divide-line">
+                    {standings.data?.entries.map((e) => {
+                      const live = isLive(e.lastCompletedAt);
+                      return (
+                        <li key={e.teamName} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 px-4 py-3.5">
+                          <div className="flex flex-col items-center">
+                            <span className={cn("data text-xl tabular-nums", e.rank <= 3 ? "text-signal" : "text-ink-2")}>{pad2(e.rank)}</span>
+                            <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", e.isComplete ? "bg-ok" : live ? "animate-breathe bg-signal" : "bg-ink-3")} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-serif text-lg text-ink">{e.teamName}</p>
+                            <p className="data mt-0.5 text-xs text-ink-3">{e.completedCount}/{e.total} solved{e.isComplete ? " · complete" : ""}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="data text-xl tabular-nums text-signal">{e.score}</div>
+                            <div className="label mt-0.5">pts</div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Panel>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Teams list */}
         <AnimatePresence>
@@ -427,6 +479,21 @@ export default function AdminPage() {
               <Button variant="alert" size="lg" className="flex-1" noMagnet disabled={reset.isPending} onClick={() => reset.mutate()}>
                 {reset.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Reset All"}
               </Button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* Sign-out confirmation */}
+      <AnimatePresence>
+        {showLogout && (
+          <Modal onClose={() => setShowLogout(false)}>
+            <LogOut className="mb-4 h-8 w-8 text-alert" />
+            <h3 className="font-serif text-3xl text-ink">Sign out of Command?</h3>
+            <p className="mt-3 text-sm text-ink-2">You&apos;ll return to the login screen and will need to re-authenticate to resume control.</p>
+            <div className="mt-8 flex gap-3">
+              <Button variant="ghost" size="lg" className="flex-1" noMagnet onClick={() => setShowLogout(false)}>Stay</Button>
+              <Button variant="alert" size="lg" className="flex-1" noMagnet onClick={() => signOut({ redirectTo: "/login" })}>Sign Out</Button>
             </div>
           </Modal>
         )}

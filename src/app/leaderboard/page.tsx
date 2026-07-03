@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useLeaderboard, useTeam, useMomentum } from "@/hooks/useGame";
-import { useEventStream } from "@/hooks/useEventStream";
 import { cn } from "@/lib/cn";
 import { spring, staggerContainer, revealVariants } from "@/lib/motion";
 
@@ -12,7 +11,6 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 const isLive = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 300000;
 
 export default function LeaderboardPage() {
-  useEventStream(true);
   const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useLeaderboard();
   const { data: momentum } = useMomentum();
   const { data: teamResp } = useTeam();

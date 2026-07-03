@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Crosshair, Loader2, AlertCircle, ArrowUpRight } from "lucide-react";
 import { useGameState, useVerify, useSkip, useTeam } from "@/hooks/useGame";
-import { useEventStream } from "@/hooks/useEventStream";
 import { useDynamicIsland } from "@/components/ui/DynamicIsland";
 import { ClientError } from "@/lib/client";
 import SkipHeartsDisplay from "@/components/SkipHeartsDisplay";
@@ -53,7 +52,6 @@ function ArchiveNotice({
 }
 
 export default function GamePage() {
-  useEventStream(true);
   const router = useRouter();
   const island = useDynamicIsland();
   const { data, isLoading } = useGameState();

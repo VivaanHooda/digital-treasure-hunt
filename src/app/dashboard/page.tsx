@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { ChevronDown, Radio, X } from "lucide-react";
 import { useGameState, useTeam, useNotifications, useDismissNotification } from "@/hooks/useGame";
-import { useEventStream } from "@/hooks/useEventStream";
 import { useDynamicIsland } from "@/components/ui/DynamicIsland";
 import { OperationsMap } from "@/components/ui/OperationsMap";
 import { Sheet } from "@/components/ui/Sheet";
@@ -46,7 +45,6 @@ function Readout({ label, value, accent }: { label: string; value: string; accen
 }
 
 export default function DashboardPage() {
-  useEventStream(true);
   const router = useRouter();
   const { data: session, status } = useSession();
   const island = useDynamicIsland();
@@ -112,14 +110,8 @@ export default function DashboardPage() {
     prevRef.current = cur;
   }, [data, island]);
 
-  const prevNotif = useRef<string | null>(null);
-  useEffect(() => {
-    const latest = notifications[0];
-    if (latest && latest.id !== prevNotif.current) {
-      if (prevNotif.current !== null) island.announce({ title: "Incoming Transmission" });
-      prevNotif.current = latest.id;
-    }
-  }, [notifications, island]);
+  // Incoming transmissions surface as a global live pop-up (TransmissionAlerts),
+  // so no per-page announcement is needed here.
 
   if (isLoading || !data) {
     return (

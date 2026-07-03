@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Radio } from "lucide-react";
 import { apiGet, apiSend, ClientError } from "@/lib/client";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -44,6 +44,7 @@ const isEmail = (v: string) => /\S+@\S+\.\S+/.test(v.trim());
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [range, setRange] = useState<{ min: number; max: number } | null>(null);
   const [form, setForm] = useState({
     teamName: "", email: "", password: "", confirmPassword: "",
@@ -68,6 +69,14 @@ export default function RegisterPage() {
         setForm((f) => ({ ...f, teamMembers: [blank(), blank(), blank()] }));
       });
   }, []);
+
+  // Already signed in? Bounce back into the app so Back never shows this form
+  // as if the operative had been signed out.
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(session?.user?.role === "ADMIN" ? "/admin" : "/dashboard");
+    }
+  }, [status, session, router]);
 
   const minMembers = (range?.min ?? 1) - 1;
   const maxMembers = (range?.max ?? 4) - 1;
@@ -133,7 +142,8 @@ export default function RegisterPage() {
         members: form.teamMembers.map((m) => ({ name: m.name, email: m.email, mobile: strip(m.mobile), department: m.department })),
       });
       const res = await signIn("credentials", { redirect: false, email: form.email, password: form.password });
-      router.push(res && !res.error ? "/dashboard" : "/login?registered=1");
+      // Replace so /register isn't left underneath in history for the Back gesture.
+      router.replace(res && !res.error ? "/dashboard" : "/login?registered=1");
       router.refresh();
     } catch (err) {
       setError(err instanceof ClientError ? err.message : "Registration failed.");
@@ -141,6 +151,19 @@ export default function RegisterPage() {
       setSubmitting(false);
     }
   };
+
+  // While a returning (authenticated) session resolves, show a loader instead of
+  // the enlistment form so Back never flashes the "signed out" screen.
+  if (status === "authenticated") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4">
+          <Radio className="h-6 w-6 animate-breathe text-signal" />
+          <p className="label">Establishing Uplink</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh items-center justify-center px-5 py-12">

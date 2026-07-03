@@ -6,6 +6,7 @@ import { Providers } from "@/components/providers";
 import ArchiveBackground from "@/components/ui/ArchiveBackground";
 import { Dock } from "@/components/ui/Dock";
 import { DynamicIslandProvider } from "@/components/ui/DynamicIsland";
+import { TransmissionAlerts } from "@/components/ui/TransmissionAlerts";
 
 const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <DynamicIslandProvider>
             <ArchiveBackground />
             <div className="relative z-10 min-h-dvh">{children}</div>
+            <TransmissionAlerts />
             <Dock />
           </DynamicIslandProvider>
         </Providers>

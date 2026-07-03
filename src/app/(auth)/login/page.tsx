@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn, getSession } from "next-auth/react";
+import { signIn, getSession, useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Loader2, MonitorSmartphone } from "lucide-react";
+import { Loader2, MonitorSmartphone, Radio } from "lucide-react";
 import { apiSend, ClientError } from "@/lib/client";
 import { Input } from "@/components/ui/Input";
 import { SweepButton } from "@/components/ui/SweepButton";
@@ -16,6 +16,7 @@ import { staggerContainer, revealVariants } from "@/lib/motion";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [formErrors, setFormErrors] = useState<{ email?: string; password?: string }>({});
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,15 @@ export default function LoginPage() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("kicked") === "1") setKicked(true);
   }, []);
+
+  // Already signed in? Bounce back into the app. This is what makes the Back
+  // gesture safe: returning to /login while authenticated lands you in the app
+  // instead of showing the sign-in screen (which read as an unwarned sign-out).
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(session?.user?.role === "ADMIN" ? "/admin" : "/dashboard");
+    }
+  }, [status, session, router]);
 
   const validate = () => {
     const errors: { email?: string; password?: string } = {};
@@ -47,7 +57,9 @@ export default function LoginPage() {
       return;
     }
     const session = await getSession();
-    router.push(session?.user?.role === "ADMIN" ? "/admin" : "/dashboard");
+    // Replace (not push) so /login is not left underneath in history — Back then
+    // moves within the app rather than returning to the sign-in screen.
+    router.replace(session?.user?.role === "ADMIN" ? "/admin" : "/dashboard");
     router.refresh();
   };
 
@@ -85,6 +97,19 @@ export default function LoginPage() {
     setShowTakeover(false);
     await doSignIn();
   };
+
+  // While a returning (authenticated) session resolves, show a loader instead of
+  // the sign-in form so Back never flashes the "signed out" screen.
+  if (status !== "unauthenticated") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4">
+          <Radio className="h-6 w-6 animate-breathe text-signal" />
+          <p className="label">Establishing Uplink</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh items-center justify-center px-5 py-12">

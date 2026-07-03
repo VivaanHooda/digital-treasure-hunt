@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -7,6 +8,7 @@ import { Compass, Crosshair, Radar, Power, type LucideIcon } from "lucide-react"
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/cn";
 import { spring } from "@/lib/motion";
+import { LogoutConfirm } from "@/components/ui/LogoutConfirm";
 
 interface DockItem {
   href: string;
@@ -29,9 +31,13 @@ const HIDDEN_ON = ["/login", "/register", "/admin"];
    ─────────────────────────────────────────────────────────────────────────── */
 export function Dock() {
   const pathname = usePathname() ?? "";
-  if (HIDDEN_ON.some((p) => pathname.startsWith(p))) return null;
+  const hidden = HIDDEN_ON.some((p) => pathname.startsWith(p));
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  if (hidden) return null;
 
   return (
+    <>
     <motion.nav
       initial={{ y: 80, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -73,7 +79,7 @@ export function Dock() {
         })}
         <div className="mx-1 h-5 w-px bg-line-strong" />
         <button
-          onClick={() => signOut({ redirectTo: "/login" })}
+          onClick={() => setConfirmOpen(true)}
           aria-label="Sign out"
           className="flex items-center rounded-full px-3 py-2 text-ink-3 transition-colors duration-200 hover:text-alert"
         >
@@ -81,5 +87,12 @@ export function Dock() {
         </button>
       </div>
     </motion.nav>
+
+    <LogoutConfirm
+      open={confirmOpen}
+      onCancel={() => setConfirmOpen(false)}
+      onConfirm={() => signOut({ redirectTo: "/login" })}
+    />
+    </>
   );
 }
