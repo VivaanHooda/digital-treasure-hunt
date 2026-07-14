@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
+// Team names are NOT unique — never use them as identity. `id` is the opaque
+// GameState id and is what clients must key rows / self-highlighting on.
 export type LeaderboardEntry = {
+  id: string;
   rank: number;
   teamName: string;
   score: number;
@@ -19,6 +22,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   const states = await prisma.gameState.findMany({
     where: { OR: [{ score: { gt: 0 } }, { completions: { some: {} } }] },
     select: {
+      id: true,
       score: true,
       isComplete: true,
       lastCompletedAt: true,
@@ -30,10 +34,11 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       { score: "desc" },
       { lastCompletedAt: { sort: "asc", nulls: "last" } },
     ],
-    take: 100,
+    take: 500,
   });
 
   return states.map((s, i) => ({
+    id: s.id,
     rank: i + 1,
     teamName: s.user.team?.teamName ?? "Unknown Team",
     score: s.score,
@@ -45,6 +50,8 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
 }
 
 export type TeamMomentum = {
+  /** GameState id — matches LeaderboardEntry.id (team names are not unique). */
+  id: string;
   teamName: string;
   /** Cumulative score sampled at SPARK_SAMPLES points over a shared axis. */
   spark: number[];
@@ -76,15 +83,22 @@ export async function getMomentum(windowMs = RECENT_WINDOW_MS): Promise<Momentum
   const states = await prisma.gameState.findMany({
     where: { OR: [{ score: { gt: 0 } }, { completions: { some: {} } }] },
     select: {
+      id: true,
       user: { select: { team: { select: { teamName: true } } } },
       completions: { select: { pointsAwarded: true, completedAt: true } },
       skips: { select: { penalty: true, skippedAt: true } },
     },
-    take: 100,
+    // Same ordering + cap as the leaderboard so both endpoints describe the
+    // same set of teams (an unordered take() returns an arbitrary subset).
+    orderBy: [
+      { score: "desc" },
+      { lastCompletedAt: { sort: "asc", nulls: "last" } },
+    ],
+    take: 500,
   });
 
   // Collect signed score events per team and find the global time window.
-  const perTeam = new Map<string, ScoreEvent[]>();
+  const perTeam = new Map<string, { teamName: string; events: ScoreEvent[] }>();
   let minAt = Infinity;
   let maxAt = -Infinity;
 
@@ -104,7 +118,7 @@ export async function getMomentum(windowMs = RECENT_WINDOW_MS): Promise<Momentum
       if (at > maxAt) maxAt = at;
     }
     events.sort((a, b) => a.at - b.at);
-    perTeam.set(teamName, events);
+    perTeam.set(s.id, { teamName, events });
   }
 
   const now = Date.now();
@@ -121,13 +135,13 @@ export async function getMomentum(windowMs = RECENT_WINDOW_MS): Promise<Momentum
     return sum;
   };
 
-  const teams: TeamMomentum[] = [...perTeam.entries()].map(([teamName, events]) => {
+  const teams: TeamMomentum[] = [...perTeam.entries()].map(([id, { teamName, events }]) => {
     const spark = Array.from({ length: SPARK_SAMPLES }, (_, i) => {
       const t = from + (span * i) / (SPARK_SAMPLES - 1);
       return cumulativeAt(events, t);
     });
     const recentGain = cumulativeAt(events, to) - cumulativeAt(events, to - windowMs);
-    return { teamName, spark, recentGain };
+    return { id, teamName, spark, recentGain };
   });
 
   return { teams, from, to, windowMs };

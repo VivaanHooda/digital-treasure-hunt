@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
-import { useLeaderboard, useTeam, useMomentum } from "@/hooks/useGame";
+import { useLeaderboard, useMomentum } from "@/hooks/useGame";
 import { cn } from "@/lib/cn";
 import { spring, staggerContainer, revealVariants } from "@/lib/motion";
 
@@ -13,15 +13,15 @@ const isLive = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTi
 export default function LeaderboardPage() {
   const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useLeaderboard();
   const { data: momentum } = useMomentum();
-  const { data: teamResp } = useTeam();
-  const myTeamName = teamResp?.team?.teamName;
+  const meId = data?.meId ?? null;
 
   const entries = data?.entries ?? [];
   const topScore = entries[0]?.score ?? 0;
 
+  // Keyed by GameState id — team names are not unique.
   const momentumByTeam = useMemo(() => {
     const m = new Map<string, { recentGain: number }>();
-    momentum?.teams.forEach((t) => m.set(t.teamName, { recentGain: t.recentGain }));
+    momentum?.teams.forEach((t) => m.set(t.id, { recentGain: t.recentGain }));
     return m;
   }, [momentum]);
 
@@ -78,15 +78,15 @@ export default function LeaderboardPage() {
         ) : (
           <motion.ol layout className="mt-2">
             {entries.map((team) => {
-              const isCurrent = !!myTeamName && team.teamName === myTeamName;
+              const isCurrent = !!meId && team.id === meId;
               const live = isLive(team.lastCompletedAt);
-              const mo = momentumByTeam.get(team.teamName);
+              const mo = momentumByTeam.get(team.id);
 
               return (
                 <motion.li
                   layout
-                  layoutId={team.teamName}
-                  key={team.teamName}
+                  layoutId={team.id}
+                  key={team.id}
                   transition={spring}
                   className={cn(
                     "relative grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 py-5",

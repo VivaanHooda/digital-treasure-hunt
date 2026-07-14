@@ -23,10 +23,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showTakeover, setShowTakeover] = useState(false);
   const [kicked, setKicked] = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
 
-  // Surfaced when this device was signed out because the account opened elsewhere.
+  // Surfaced when this device was signed out because the account opened
+  // elsewhere, or arrived here after registering (auto sign-in didn't stick).
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("kicked") === "1") setKicked(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("kicked") === "1") setKicked(true);
+    if (params.get("registered") === "1") setJustRegistered(true);
   }, []);
 
   // Already signed in? Bounce back into the app. This is what makes the Back
@@ -123,6 +127,16 @@ export default function LoginPage() {
         <motion.p variants={revealVariants} className="mt-5 text-ink-2">
           An intelligence operation. Identify yourself to proceed.
         </motion.p>
+
+        {/* Registered notice */}
+        {justRegistered && (
+          <motion.div variants={revealVariants} className="mt-6 flex items-start gap-3 border-l-2 border-signal pl-4">
+            <Radio className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
+            <p className="text-sm text-ink-2">
+              Enlistment filed. Sign in with your new credentials to begin the operation.
+            </p>
+          </motion.div>
+        )}
 
         {/* Kicked notice */}
         {kicked && (

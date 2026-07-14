@@ -61,7 +61,7 @@ type AdminNote = {
   id: string; title: string; message: string; type: string; isActive: boolean; readCount: number; createdAt: string;
 };
 type StandingRow = {
-  rank: number; teamName: string; score: number; completedCount: number; total: number; isComplete: boolean; lastCompletedAt: string | null;
+  id: string; rank: number; teamName: string; score: number; completedCount: number; total: number; isComplete: boolean; lastCompletedAt: string | null;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -88,9 +88,11 @@ export default function AdminPage() {
 
   const settings = useQuery({ queryKey: ["adminSettings"], queryFn: () => apiGet<AdminSettings>("/api/admin/settings") });
   const datasets = useQuery({ queryKey: ["adminDatasets"], queryFn: () => apiGet<{ datasets: DatasetOption[] }>("/api/admin/datasets") });
-  const stats = useQuery({ queryKey: ["adminStats"], queryFn: () => apiGet<Stats>("/api/admin/stats") });
-  const teams = useQuery({ queryKey: ["adminTeams"], queryFn: () => apiGet<{ teams: AdminTeam[] }>("/api/admin/teams") });
-  const notes = useQuery({ queryKey: ["adminNotes"], queryFn: () => apiGet<{ notifications: AdminNote[] }>("/api/admin/notifications") });
+  // Stats/teams/notes aren't invalidated by the SSE stream — poll so the
+  // command view doesn't freeze at its first snapshot during a live game.
+  const stats = useQuery({ queryKey: ["adminStats"], queryFn: () => apiGet<Stats>("/api/admin/stats"), refetchInterval: 15_000 });
+  const teams = useQuery({ queryKey: ["adminTeams"], queryFn: () => apiGet<{ teams: AdminTeam[] }>("/api/admin/teams"), refetchInterval: 30_000 });
+  const notes = useQuery({ queryKey: ["adminNotes"], queryFn: () => apiGet<{ notifications: AdminNote[] }>("/api/admin/notifications"), refetchInterval: 30_000 });
   // Shares the "leaderboard" query key so the global SSE stream refreshes it live.
   const standings = useQuery({ queryKey: ["leaderboard"], queryFn: () => apiGet<{ entries: StandingRow[] }>("/api/leaderboard") });
 
@@ -359,7 +361,7 @@ export default function AdminPage() {
                     {standings.data?.entries.map((e) => {
                       const live = isLive(e.lastCompletedAt);
                       return (
-                        <li key={e.teamName} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 px-4 py-3.5">
+                        <li key={e.id} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 px-4 py-3.5">
                           <div className="flex flex-col items-center">
                             <span className={cn("data text-xl tabular-nums", e.rank <= 3 ? "text-signal" : "text-ink-2")}>{pad2(e.rank)}</span>
                             <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", e.isComplete ? "bg-ok" : live ? "animate-breathe bg-signal" : "bg-ink-3")} />

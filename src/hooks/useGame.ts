@@ -54,6 +54,8 @@ export type VerifyResult = {
 };
 
 export type LeaderboardEntry = {
+  /** Stable opaque id — team names are NOT unique; key rows on this. */
+  id: string;
   rank: number;
   teamName: string;
   score: number;
@@ -97,12 +99,15 @@ export function useGameState() {
 export function useLeaderboard() {
   return useQuery({
     queryKey: queryKeys.leaderboard,
-    queryFn: () => apiGet<{ entries: LeaderboardEntry[] }>("/api/leaderboard"),
+    // meId identifies the caller's own entry (self-highlight by id, not name).
+    queryFn: () => apiGet<{ entries: LeaderboardEntry[]; meId: string | null }>("/api/leaderboard"),
     refetchInterval: 15_000, // safety net atop SSE; also keeps the sync clock live
   });
 }
 
 export type TeamMomentum = {
+  /** GameState id — matches LeaderboardEntry.id. */
+  id: string;
   teamName: string;
   spark: number[];
   recentGain: number;

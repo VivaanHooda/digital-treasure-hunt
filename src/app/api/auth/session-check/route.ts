@@ -18,11 +18,14 @@ const schema = z.object({ email: z.string().email(), password: z.string().min(1)
 export async function POST(req: Request) {
   return handle(async () => {
     assertSameOrigin(req);
-    await rateLimit({ ...POLICIES.login, id: getClientIp(req) });
+    // Per-IP ceiling only as a backstop — the venue shares NAT'd IPs, so the
+    // strict limit is per email (below), matching the sign-in endpoint.
+    await rateLimit({ ...POLICIES.loginIp, id: getClientIp(req) });
 
     const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return json({ valid: false, hasActiveSession: false });
     const email = parsed.data.email.toLowerCase();
+    await rateLimit({ ...POLICIES.login, id: email });
 
     const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
     if (adminEmail && email === adminEmail) {

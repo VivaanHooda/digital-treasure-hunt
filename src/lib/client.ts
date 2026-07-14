@@ -19,14 +19,17 @@ async function parse<T>(res: Response): Promise<T> {
     } catch {
       /* non-JSON error */
     }
-    // Fallback for a device that missed the real-time revoke (e.g. no live
-    // stream): the next API call learns the session was taken over → log out.
-    if (
+    // Any 401 means this device no longer holds a usable session (revoked by a
+    // takeover, cleared by an admin reset, or simply expired). Without a
+    // redirect the app hangs on its loading state forever, so send the user
+    // back to sign in. The auth pages themselves are exempt.
+    const onAuthPage =
       typeof window !== "undefined" &&
-      body?.code === "SESSION_REVOKED" &&
-      !window.location.pathname.startsWith("/login")
-    ) {
-      window.location.href = "/login?kicked=1";
+      (window.location.pathname.startsWith("/login") ||
+        window.location.pathname.startsWith("/register"));
+    if (typeof window !== "undefined" && res.status === 401 && !onAuthPage) {
+      window.location.href =
+        body?.code === "SESSION_REVOKED" ? "/login?kicked=1" : "/login";
     }
     throw new ClientError(res.status, body?.error ?? res.statusText, body?.code);
   }

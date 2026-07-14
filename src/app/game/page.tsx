@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Crosshair, Loader2, AlertCircle, ArrowUpRight } from "lucide-react";
 import { useGameState, useVerify, useSkip, useTeam } from "@/hooks/useGame";
@@ -54,7 +55,7 @@ function ArchiveNotice({
 export default function GamePage() {
   const router = useRouter();
   const island = useDynamicIsland();
-  const { data, isLoading } = useGameState();
+  const { data, isLoading, error } = useGameState();
   const { data: teamResp } = useTeam();
   const team = teamResp?.team;
   const verify = useVerify();
@@ -114,6 +115,24 @@ export default function GamePage() {
       setDisplayError(e instanceof ClientError ? e.message : "Could not waive this file.");
     }
   };
+
+  // No cached data AND the fetch failed: without this branch the page spins
+  // forever (e.g. this account's game state was removed by an admin reset).
+  if (!data && !isLoading && error) {
+    const noGame = error instanceof ClientError && error.status === 404;
+    return (
+      <ArchiveNotice
+        tag={noGame ? "Access Revoked" : "Uplink Failure"}
+        title={noGame ? "No Active Assignment" : "Connection Lost"}
+        body={
+          noGame
+            ? "This account has no active operation — it may have been reset by mission control. Sign in again to re-enlist."
+            : "The dossier could not be retrieved. Check your connection and retry, or sign out and back in."
+        }
+        action={{ label: "Sign Out", onClick: () => signOut({ redirectTo: "/login" }) }}
+      />
+    );
+  }
 
   if (isLoading || !data) {
     return (

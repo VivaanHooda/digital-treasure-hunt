@@ -144,15 +144,16 @@ export async function updateChallenge(id: string, input: Partial<ChallengeInput>
     throw new ApiError(400, "Picture challenges require an image.", "VALIDATION_ERROR");
   }
 
-  // If the image is being replaced, remove the old local upload.
-  if (input.imageUrl !== undefined && existing.imageUrl && existing.imageUrl !== input.imageUrl) {
-    await removeUpload(existing.imageUrl);
-  }
-
   await prisma.challenge.update({
     where: { id },
     data: { ...input, imageUrl: input.imageUrl !== undefined ? (input.imageUrl ?? null) : undefined },
   });
+
+  // Only after the DB update commits: removing the old file first would leave
+  // the row pointing at a deleted image if the update failed.
+  if (input.imageUrl !== undefined && existing.imageUrl && existing.imageUrl !== input.imageUrl) {
+    await removeUpload(existing.imageUrl);
+  }
   return { ok: true };
 }
 
@@ -228,41 +229,52 @@ export async function importDataset(payload: DatasetImport) {
   const name = await uniqueDatasetName((payload.name ?? "Imported Dataset").trim() || "Imported Dataset");
 
   // Resolve images and validate every challenge BEFORE writing the dataset.
+  // Track written files so a failure anywhere leaves no orphans on disk.
   const prepared: ChallengeInput[] = [];
-  for (const c of payload.challenges) {
-    let imageUrl = c.imageUrl;
-    if (c.image) imageUrl = await saveUploadBuffer(Buffer.from(c.image.data, "base64"), c.image.mime);
-    const v = parseOrThrow(challengeCreateSchema, {
-      type: c.type,
-      title: c.title,
-      description: c.description,
-      imageUrl,
-      latitude: c.latitude,
-      longitude: c.longitude,
-      marginOfError: c.marginOfError,
-      points: c.points,
-    });
-    prepared.push(v);
-  }
+  const savedImages: string[] = [];
+  let created;
+  try {
+    for (const c of payload.challenges) {
+      let imageUrl = c.imageUrl;
+      if (c.image) {
+        imageUrl = await saveUploadBuffer(Buffer.from(c.image.data, "base64"), c.image.mime);
+        savedImages.push(imageUrl);
+      }
+      const v = parseOrThrow(challengeCreateSchema, {
+        type: c.type,
+        title: c.title,
+        description: c.description,
+        imageUrl,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        marginOfError: c.marginOfError,
+        points: c.points,
+      });
+      prepared.push(v);
+    }
 
-  const created = await prisma.$transaction(async (tx) => {
-    const dataset = await tx.dataset.create({ data: { name } });
-    await tx.challenge.createMany({
-      data: prepared.map((p, i) => ({
-        datasetId: dataset.id,
-        position: i,
-        type: p.type,
-        title: p.title,
-        description: p.description,
-        imageUrl: p.imageUrl ?? null,
-        latitude: p.latitude,
-        longitude: p.longitude,
-        marginOfError: p.marginOfError,
-        points: p.points,
-      })),
+    created = await prisma.$transaction(async (tx) => {
+      const dataset = await tx.dataset.create({ data: { name } });
+      await tx.challenge.createMany({
+        data: prepared.map((p, i) => ({
+          datasetId: dataset.id,
+          position: i,
+          type: p.type,
+          title: p.title,
+          description: p.description,
+          imageUrl: p.imageUrl ?? null,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          marginOfError: p.marginOfError,
+          points: p.points,
+        })),
+      });
+      return dataset;
     });
-    return dataset;
-  });
+  } catch (e) {
+    await Promise.all(savedImages.map((url) => removeUpload(url)));
+    throw e;
+  }
 
   await events.settings();
   return { id: created.id, name, count: prepared.length };

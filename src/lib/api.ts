@@ -20,10 +20,21 @@ export function fail(status: number, message: string, code?: string) {
   return NextResponse.json({ error: message, code }, { status });
 }
 
-/** Best-effort client IP for rate limiting. */
+/**
+ * Best-effort client IP for rate limiting. Uses the RIGHTMOST x-forwarded-for
+ * entry: that hop was appended by our own reverse proxy, whereas leftmost
+ * entries are client-supplied and trivially spoofable (an attacker could
+ * rotate them to reset their rate-limit bucket). Requires the deployment's
+ * proxy to append the real client IP (nginx `proxy_set_header X-Forwarded-For
+ * $proxy_add_x_forwarded_for` or equivalent).
+ */
 export function getClientIp(req: Request): string {
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
+  if (xff) {
+    const parts = xff.split(",");
+    const last = parts[parts.length - 1].trim();
+    if (last) return last;
+  }
   return req.headers.get("x-real-ip") ?? "unknown";
 }
 

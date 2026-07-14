@@ -30,7 +30,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale: blocking pinch-zoom is an accessibility failure (and iOS
+  // Safari ignores it anyway).
   themeColor: "#0a0a0b",
 };
 

@@ -104,20 +104,24 @@ async function register(payload, xff) {
   return { status: r.status, data };
 }
 
-const team = (over = {}) => ({
-  email: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}@test.com`,
-  password: "password123",
-  teamName: "E2E Team",
-  leaderName: "Leader",
-  leaderMobile: "9990001111",
-  leaderDepartment: "CSE",
-  members: [
-    { name: "M1", mobile: "9990001112", department: "ISE" },
-    { name: "M2", mobile: "9990001113", department: "ECE" },
-    { name: "M3", mobile: "9990001114", department: "EEE" },
-  ],
-  ...over,
-});
+const team = (over = {}) => {
+  // Member emails are required at registration and must be unique per team.
+  const uid = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  return {
+    email: `e2e_${uid}@test.com`,
+    password: "password123",
+    teamName: "E2E Team",
+    leaderName: "Leader",
+    leaderMobile: "9990001111",
+    leaderDepartment: "CSE",
+    members: [
+      { name: "M1", email: `e2e_${uid}_m1@test.com`, mobile: "9990001112", department: "ISE" },
+      { name: "M2", email: `e2e_${uid}_m2@test.com`, mobile: "9990001113", department: "ECE" },
+      { name: "M3", email: `e2e_${uid}_m3@test.com`, mobile: "9990001114", department: "EEE" },
+    ],
+    ...over,
+  };
+};
 
 const target = async (userId) => {
   const gs = await prisma.gameState.findUnique({ where: { userId } });
@@ -169,9 +173,9 @@ async function main() {
   r = await register(team({ email: "not-an-email" }), "reg-bad3");
   check("invalid email → 400", r.status === 400, `got ${r.status}`);
 
-  // rate limit: register policy is 3 / 5min per IP
+  // rate limit: register policy is 30 / 5min per IP (sized for shared campus NAT)
   const rlXff = "reg-rl";
-  for (let i = 0; i < 3; i++) await register(team({ password: "x" }), rlXff); // consume (validation 400 still counts)
+  for (let i = 0; i < 30; i++) await register(team({ password: "x" }), rlXff); // consume (validation 400 still counts)
   r = await register(team({ password: "x" }), rlXff);
   check("register rate limit → 429", r.status === 429 && r.data.code === "RATE_LIMITED", `got ${r.status}`);
 
@@ -225,6 +229,12 @@ async function main() {
   check("low GPS accuracy → 422 LOW_ACCURACY", v.status === 422 && v.data.code === "LOW_ACCURACY", `got ${v.status}/${v.data.code}`);
   st = await api(wJar, "GET", "/api/game/state");
   check("low-accuracy did NOT burn a cooldown", st.data.game.cooldownRemaining === 0, `cd=${st.data.game.cooldownRemaining}`);
+  // The rejection throws — the audit row must be written OUTSIDE the game
+  // transaction or it silently rolls back with it.
+  const lowAccRows = await prisma.submission.count({
+    where: { gameState: { userId: winnerId }, success: false, accuracy: 99999 },
+  });
+  check("low-accuracy attempt persisted to audit trail", lowAccRows === 1, `rows=${lowAccRows}`);
 
   v = await api(wJar, "POST", "/api/game/verify", { body: { latitude: 1, longitude: 1, accuracy: 5 } });
   check("wrong location → correct:false + cooldown", v.status === 200 && v.data.correct === false && v.data.cooldownRemaining > 0, JSON.stringify(v.data));

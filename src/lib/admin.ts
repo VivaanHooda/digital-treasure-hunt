@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { events } from "@/lib/events";
 import { ApiError } from "@/lib/api";
 import { ADMIN_ID } from "@/lib/config";
+import { redis, sessionKey } from "@/lib/redis";
 import { archiveCurrentGame } from "@/lib/archive";
 
 // ---- Settings -------------------------------------------------------------
@@ -107,6 +108,20 @@ export async function startGame(input: {
   }
   const count = await prisma.challenge.count({ where: { datasetId: input.selectedDatasetId } });
   if (count === 0) throw new ApiError(400, "That dataset has no challenges.", "EMPTY_DATASET");
+
+  // GameStates persist until a team reset. Pre-registered teams for THIS game
+  // (same dataset, not complete) are expected — but leftovers from a previous
+  // game would pollute the leaderboard/archive while being unable to play.
+  const stale = await prisma.gameState.count({
+    where: { OR: [{ datasetId: { not: input.selectedDatasetId } }, { isComplete: true }] },
+  });
+  if (stale > 0) {
+    throw new ApiError(
+      409,
+      `${stale} team(s) from a previous game still exist. Reset all units before starting a new game (archive the old game first if you haven't).`,
+      "STALE_TEAMS",
+    );
+  }
 
   await prisma.gameSettings.update({
     where: { id: "global" },
@@ -310,7 +325,18 @@ export async function buildAttendanceCsv(): Promise<string> {
 
 /** Delete all non-admin users (cascades to team, members, game state). */
 export async function resetAllTeams() {
+  const users = await prisma.user.findMany({ where: { role: "USER" }, select: { id: true } });
   const result = await prisma.user.deleteMany({ where: { role: "USER" } });
+  // Clear the deleted users' active-session records so their (still-valid)
+  // JWTs fail the requireUser check as SESSION_REVOKED and their devices are
+  // sent back to /login instead of hanging on a broken authenticated state.
+  if (users.length > 0) {
+    try {
+      await redis.del(...users.map((u) => sessionKey(u.id)));
+    } catch (e) {
+      console.error("Failed to clear session keys on reset:", e);
+    }
+  }
   await events.leaderboard();
   return { deleted: result.count };
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { ChevronDown, Radio, X } from "lucide-react";
 import { useGameState, useTeam, useNotifications, useDismissNotification } from "@/hooks/useGame";
@@ -53,7 +53,7 @@ export default function DashboardPage() {
     if (status === "authenticated" && session?.user?.role === "ADMIN") router.replace("/admin");
   }, [status, session, router]);
 
-  const { data, isLoading } = useGameState();
+  const { data, isLoading, error } = useGameState();
   const { data: teamResp } = useTeam();
   const team = teamResp?.team;
 
@@ -112,6 +112,29 @@ export default function DashboardPage() {
 
   // Incoming transmissions surface as a global live pop-up (TransmissionAlerts),
   // so no per-page announcement is needed here.
+
+  // No cached data AND the fetch failed: give the operative a way out instead
+  // of an eternal spinner (e.g. after an admin reset removed this account's game).
+  if (!data && !isLoading && error) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center px-6">
+        <div className="w-full max-w-lg text-center">
+          <div className="label mb-6">Uplink Failure</div>
+          <h2 className="font-serif text-5xl text-ink">Control Unreachable</h2>
+          <p className="mx-auto mt-6 max-w-md text-ink-2">
+            Mission data could not be retrieved — your account may have been reset by
+            mission control, or the connection dropped. Sign in again to resume.
+          </p>
+          <button
+            onClick={() => signOut({ redirectTo: "/login" })}
+            className="mt-10 rounded-xl border border-line-strong px-6 py-3 text-ink transition-colors hover:border-signal hover:text-signal"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !data) {
     return (

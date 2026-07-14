@@ -5,12 +5,17 @@ import { z } from "zod";
 import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { redis, sessionKey, CHANNELS } from "@/lib/redis";
+import { rateLimit, POLICIES } from "@/lib/rateLimit";
 import { ADMIN_ID } from "@/lib/config";
 
 const credsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+// Match the default Auth.js JWT maxAge so the "active session" record can't
+// outlive the token it describes (also stops keys accumulating forever).
+const SESSION_TTL_SEC = 30 * 24 * 60 * 60;
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
@@ -21,6 +26,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const parsed = credsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const email = parsed.data.email.toLowerCase();
+
+        // This is the REAL credential check (the /api/auth/session-check probe
+        // is only called by our UI), so it must be rate-limited itself or an
+        // attacker can brute-force the NextAuth callback directly. Keyed by
+        // email: per-IP would lock out a whole venue behind one NAT.
+        try {
+          await rateLimit({ ...POLICIES.login, id: email });
+        } catch {
+          return null; // limited (or limiter threw) — reject the attempt
+        }
 
         // Admin: authenticated from env creds (no DB row). Checked first so the
         // admin email can never be a regular account.
@@ -59,7 +74,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // that device's session channel so it logs out immediately.
       if (params.user && token && token.role !== "ADMIN") {
         const prevSid = await redis.get(sessionKey(token.userId));
-        await redis.set(sessionKey(token.userId), token.sid);
+        await redis.set(sessionKey(token.userId), token.sid, "EX", SESSION_TTL_SEC);
         if (prevSid && prevSid !== token.sid) {
           await redis.publish(CHANNELS.session(prevSid), JSON.stringify({ type: "sessionRevoked" }));
         }

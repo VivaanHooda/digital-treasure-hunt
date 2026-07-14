@@ -135,50 +135,57 @@ export async function verifyLocation(userId: string, input: VerifyInput) {
   const settings = await getSettings();
   assertPlayable(settings, computeTime(settings));
 
+  // Reads happen before the transaction: verify/skip are serialized per user by
+  // the Redis lock, and the unique constraint on (gameStateId, challengeId)
+  // backstops any double-complete.
+  const gs = await prisma.gameState.findUnique({ where: { userId } });
+  if (!gs) throw new ApiError(404, "Game state not found.", "NO_GAME");
+  const total = gs.challengeIds.length;
+  if (gs.isComplete || gs.currentIndex >= total) {
+    throw new ApiError(409, "The game is already complete.", "COMPLETE");
+  }
+
+  const now = Date.now();
+  if (gs.cooldownEndsAt && now < gs.cooldownEndsAt.getTime()) {
+    const remaining = Math.ceil((gs.cooldownEndsAt.getTime() - now) / 1000);
+    throw new ApiError(429, `Please wait ${remaining}s before trying again.`, "COOLDOWN");
+  }
+
+  const challengeId = gs.challengeIds[gs.currentIndex];
+  const challenge = await prisma.challenge.findUnique({ where: { id: challengeId } });
+  if (!challenge) throw new ApiError(500, "Challenge data missing.", "NO_CHALLENGE");
+
+  const distance = round2(
+    haversineMeters(input.latitude, input.longitude, challenge.latitude, challenge.longitude),
+  );
+
+  if (input.accuracy != null && input.accuracy > challenge.marginOfError * MAX_ACCURACY_MULTIPLIER) {
+    // Recorded OUTSIDE any transaction: this rejection throws, and a write
+    // inside the transaction would be rolled back with it — silently losing
+    // the forensic trail for exactly the suspicious (spoofed-GPS) attempts.
+    await prisma.submission.create({
+      data: {
+        gameStateId: gs.id,
+        challengeId,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        accuracy: input.accuracy,
+        distance,
+        success: false,
+      },
+    });
+    throw new ApiError(
+      422,
+      `GPS accuracy too low (±${Math.round(input.accuracy)}m). Move to open sky and retry.`,
+      "LOW_ACCURACY",
+    );
+  }
+
+  const success = distance <= challenge.marginOfError;
+
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-      const gs = await tx.gameState.findUnique({ where: { userId } });
-      if (!gs) throw new ApiError(404, "Game state not found.", "NO_GAME");
-      const total = gs.challengeIds.length;
-      if (gs.isComplete || gs.currentIndex >= total) {
-        throw new ApiError(409, "The game is already complete.", "COMPLETE");
-      }
-
-      const now = Date.now();
-      if (gs.cooldownEndsAt && now < gs.cooldownEndsAt.getTime()) {
-        const remaining = Math.ceil((gs.cooldownEndsAt.getTime() - now) / 1000);
-        throw new ApiError(429, `Please wait ${remaining}s before trying again.`, "COOLDOWN");
-      }
-
-      const challengeId = gs.challengeIds[gs.currentIndex];
-      const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
-      if (!challenge) throw new ApiError(500, "Challenge data missing.", "NO_CHALLENGE");
-
-      const distance = round2(
-        haversineMeters(input.latitude, input.longitude, challenge.latitude, challenge.longitude),
-      );
-
-      if (input.accuracy != null && input.accuracy > challenge.marginOfError * MAX_ACCURACY_MULTIPLIER) {
-        await tx.submission.create({
-          data: {
-            gameStateId: gs.id,
-            challengeId,
-            latitude: input.latitude,
-            longitude: input.longitude,
-            accuracy: input.accuracy,
-            distance,
-            success: false,
-          },
-        });
-        throw new ApiError(
-          422,
-          `GPS accuracy too low (±${Math.round(input.accuracy)}m). Move to open sky and retry.`,
-          "LOW_ACCURACY",
-        );
-      }
-
-      const success = distance <= challenge.marginOfError;
       await tx.submission.create({
         data: {
           gameStateId: gs.id,

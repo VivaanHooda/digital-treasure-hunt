@@ -14,7 +14,8 @@ export async function GET(req: Request) {
       where: { id: "global" },
       select: { minTeamSize: true, maxTeamSize: true },
     });
-    return json({ minTeamSize: s?.minTeamSize ?? 4, maxTeamSize: s?.maxTeamSize ?? 4 });
+    // Fallbacks mirror the schema defaults (min 3 / max 4).
+    return json({ minTeamSize: s?.minTeamSize ?? 3, maxTeamSize: s?.maxTeamSize ?? 4 });
   });
 }
 

@@ -1,11 +1,13 @@
 import { requireUser } from "@/lib/session";
-import { createRedis, CHANNELS } from "@/lib/redis";
+import { CHANNELS } from "@/lib/redis";
+import { subscribeChannels } from "@/lib/subscriber";
 import { ApiError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Server-Sent Events stream backed by Redis Pub/Sub.
+ * Server-Sent Events stream backed by a process-wide Redis Pub/Sub hub
+ * (see lib/subscriber.ts — one Redis connection per process, not per client).
  *
  * Robustness model: every event is just a "something changed" signal. On
  * connect (and on every EventSource auto-reconnect) we emit a `snapshot` event
@@ -21,7 +23,6 @@ export async function GET(req: Request) {
     return new Response("Unauthorized", { status });
   }
 
-  const sub = createRedis();
   const channels = [
     CHANNELS.leaderboard,
     CHANNELS.settings,
@@ -33,10 +34,11 @@ export async function GET(req: Request) {
 
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let unsubscribe: (() => void) | undefined;
   let closed = false;
 
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
       const send = (event: string, data: unknown) => {
         if (closed) return;
         controller.enqueue(
@@ -44,16 +46,11 @@ export async function GET(req: Request) {
         );
       };
 
-      const cleanup = async () => {
+      const cleanup = () => {
         if (closed) return;
         closed = true;
         if (heartbeat) clearInterval(heartbeat);
-        try {
-          await sub.unsubscribe();
-          sub.disconnect();
-        } catch {
-          /* ignore */
-        }
+        unsubscribe?.();
         try {
           controller.close();
         } catch {
@@ -61,7 +58,7 @@ export async function GET(req: Request) {
         }
       };
 
-      sub.on("message", (_channel, message) => {
+      unsubscribe = subscribeChannels(channels, (message) => {
         let payload: { type?: string };
         try {
           payload = JSON.parse(message);
@@ -70,10 +67,8 @@ export async function GET(req: Request) {
         }
         send(payload.type ?? "update", payload);
         // This session was taken over elsewhere — push the event, then close.
-        if (payload.type === "sessionRevoked") void cleanup();
+        if (payload.type === "sessionRevoked") cleanup();
       });
-
-      await sub.subscribe(...channels);
 
       // Tell the client to load a fresh snapshot of everything.
       send("snapshot", { at: Date.now() });
@@ -83,16 +78,16 @@ export async function GET(req: Request) {
         try {
           controller.enqueue(encoder.encode(`: ping\n\n`));
         } catch {
-          void cleanup();
+          cleanup();
         }
       }, 25_000);
 
-      req.signal.addEventListener("abort", () => void cleanup());
+      req.signal.addEventListener("abort", cleanup);
     },
     cancel() {
       closed = true;
       if (heartbeat) clearInterval(heartbeat);
-      sub.disconnect();
+      unsubscribe?.();
     },
   });
 
